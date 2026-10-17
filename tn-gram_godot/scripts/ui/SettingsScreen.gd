@@ -174,6 +174,11 @@ func _address_from_field() -> Dictionary:
 	var raw := address_field.text.strip_edges()
 	if raw == "":
 		return { "ok": false }
+	# start.bat печатает адрес с префиксом ws:// — принимаем и его, и голый «адрес:порт»
+	for scheme in ["ws://", "wss://", "tcp://"]:
+		if raw.to_lower().begins_with(scheme):
+			raw = raw.substr(scheme.length()).strip_edges()
+	raw = raw.trim_suffix("/").strip_edges()
 	var host := raw
 	var port := P.DEFAULT_PORT
 	var cut := raw.rfind(":")

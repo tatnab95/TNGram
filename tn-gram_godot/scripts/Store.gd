@@ -213,8 +213,10 @@ func relay_host() -> String:
 func relay_port() -> int:
 	return int(settings.get("relay_port", P.DEFAULT_PORT))
 
+## Галочка «подключаться при входе». По умолчанию включена: иначе входящий на связь
+## пользователь просто набирает текст, и сообщение уходит только на своё устройство.
 func relay_auto() -> bool:
-	return bool(settings.get("relay_auto", false))
+	return bool(settings.get("relay_auto", true))
 
 func set_relay(host: String, port: int, auto: bool) -> void:
 	settings["relay_host"] = host.strip_edges()

@@ -13,7 +13,7 @@ if not exist "%GODOT_EXE%" (
     if errorlevel 1 (
         echo.
         echo Godot not found. Open run.bat and set the correct GODOT_EXE path.
-        echo Looked for: %GODOT_EXE%
+        echo Looked for: "%GODOT_EXE%"
         echo.
         pause
         exit /b 1

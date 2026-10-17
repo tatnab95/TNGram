@@ -119,6 +119,11 @@ func _ready() -> void:
 	check("адрес сервера запоминается", Store.relay_host() == "192.168.1.5", Store.relay_host())
 	check("порт сервера запоминается", Store.relay_port() == 8123, str(Store.relay_port()))
 	check("галочка «подключаться при входе» запоминается", Store.relay_auto())
+	# Адрес должен пережить перезапуск — читаем настройки из файла заново
+	Store.load_data()
+	check("адрес сервера уцелел после перезапуска", Store.relay_host() == "192.168.1.5", Store.relay_host())
+	check("порт сервера уцелел после перезапуска", Store.relay_port() == 8123, str(Store.relay_port()))
+	check("галочка «подключаться при входе» уцелела после перезапуска", Store.relay_auto())
 	Store.set_relay("127.0.0.1", 7777, false)
 	check("настройки связи возвращаются к обычным",
 		Store.relay_host() == "127.0.0.1" and Store.relay_port() == 7777 and not Store.relay_auto())
@@ -203,6 +208,12 @@ func _ready() -> void:
 			await get_tree().process_frame
 			check("неправильный адрес вежливо отклонён", String(status_label.text) == Loc.t("net_bad_address"),
 				String(status_label.text))
+		# Адрес из start.bat напечатан с префиксом ws:// — он обязан приниматься
+		address_field.text = "ws://192.168.1.5:8123"
+		var parsed: Dictionary = main.screen.call("_address_from_field")
+		check("адрес с префиксом ws:// принимается",
+			bool(parsed.get("ok")) and String(parsed.get("host")) == "192.168.1.5" and int(parsed.get("port")) == 8123,
+			str(parsed))
 		address_field.text = "127.0.0.1:7777"
 	Net.stop()
 	# Отправка «мимо сети»: связи нет, но сообщение обязано остаться у нас
