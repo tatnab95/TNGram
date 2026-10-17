@@ -1,0 +1,36 @@
+; Файл настроек Godot-проекта «Тнграм».
+; Обычно его правят через редактор Godot, но основные параметры указаны здесь.
+
+config_version=5
+
+[application]
+
+config/name="TNGram"
+config/description="Тнграм — приватный мессенджер: сообщение доставляется и удаляется с сервера."
+run/main_scene="res://scenes/Main.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+config/icon="res://icon.png"
+
+[autoload]
+
+Store="*res://scripts/Store.gd"
+Loc="*res://scripts/Loc.gd"
+Net="*res://scripts/net/Net.gd"
+
+[display]
+
+window/size/viewport_width=1100
+window/size/viewport_height=740
+window/size/resizable=true
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[physics]
+
+3d/physics_engine="Jolt Physics"
+
+[rendering]
+
+rendering_device/driver.windows="d3d12"
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

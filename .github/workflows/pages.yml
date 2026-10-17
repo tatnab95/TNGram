@@ -1,0 +1,41 @@
+# Бесплатная публикация сайта на GitHub Pages (без сервера и без оплаты).
+# Включи: репозиторий → Settings → Pages → Source: GitHub Actions.
+# Папка сайта называется «сайт»; копируем её в _site, чтобы ссылки были без кириллицы.
+name: Deploy site
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare site folder
+        run: |
+          mkdir -p _site
+          cp -r сайт/. _site/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

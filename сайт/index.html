@@ -1,0 +1,1518 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Тнграм — приватный мессенджер</title>
+  <meta name="description" content="Тнграм — приватный мессенджер. Сообщение доставлено и сразу удалено с сервера. Переписка хранится только на твоём устройстве."/>
+  <meta name="theme-color" content="#05070a"/>
+
+  <!-- Иконка сайта (favicon). Файл icon.png лежит рядом с index.html -->
+  <link rel="icon" href="icon.png" type="image/png" id="favicon"/>
+  <link rel="apple-touch-icon" href="icon.png"/>
+
+  <!-- Превью при отправке ссылки в мессенджерах -->
+  <meta property="og:type" content="website"/>
+  <meta property="og:title" content="Тнграм — приватный мессенджер" id="og-title"/>
+  <meta property="og:description" content="Скоро. Приватный мессенджер без хранения переписки на сервере." id="og-desc"/>
+  <meta property="og:image" content="icon.png"/>
+
+  <style>
+    /* ============================================================================
+       1. ЦВЕТА И НАСТРОЙКИ — меняй оформление здесь
+       ----------------------------------------------------------------------------
+       --a1 / --a2  — основные акценты (записываются как "47,123,255" без rgb())
+       --a1-soft / --a2-soft — те же цвета, но светлее: для текста и градиентов
+       Темы ниже можно менять и дополнять: [data-theme="имя"].
+       ============================================================================ */
+    :root{
+      --bg:            #05070a;                  /* основной тёмный фон */
+      --text:          #f4f7fb;                  /* основной текст */
+      --muted:         #99a3b2;                  /* вторичный текст */
+      --line:          rgba(255,255,255,.10);    /* тонкая светлая обводка */
+      --glass:         rgba(255,255,255,.055);   /* стеклянная подложка */
+      --radius:        26px;                     /* скругление карточек */
+      --blur:          22px;                     /* сила размытия стекла */
+      --maxw:          1080px;                   /* ширина контента */
+      --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
+              Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    /* Тема 1 — «Тёмная» (по умолчанию): синий + зелёный */
+    :root, :root[data-theme="dark"]{
+      --a1: 47,123,255;      --a2: 0,224,143;      --a3: 122,92,255;
+      --a1-soft: #a9c8ff;    --a2-soft: #7ff0c4;
+    }
+    /* Тема 2 — «Зелёная» */
+    :root[data-theme="green"]{
+      --a1: 0,196,132;       --a2: 138,214,42;     --a3: 0,166,196;
+      --a1-soft: #96f0cd;    --a2-soft: #c6f07a;
+    }
+    /* Тема 3 — «Синяя» */
+    :root[data-theme="blue"]{
+      --a1: 59,130,246;      --a2: 139,92,246;     --a3: 56,189,248;
+      --a1-soft: #b6c9ff;    --a2-soft: #cbb4ff;
+    }
+
+    /* Градиентный текст (заголовки-акценты) */
+    .gradient-text{
+      background: linear-gradient(100deg, #ffffff 0%, var(--a1-soft) 48%, var(--a2-soft) 100%);
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent; color: transparent;
+    }
+
+    /* ============================================================================
+       2. БАЗА
+       ============================================================================ */
+    *,*::before,*::after{ box-sizing: border-box; }
+    html{ scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body{
+      margin: 0; font-family: var(--font); color: var(--text); background: var(--bg);
+      line-height: 1.6; overflow-x: hidden;
+      -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+    }
+    img{ max-width: 100%; display: block; }
+    ::selection{ background: rgba(var(--a1), .4); }
+    .wrap{ width: 100%; max-width: var(--maxw); margin-inline: auto; padding-inline: 22px; }
+
+    /* Плавная смена цветов при переключении темы */
+    body, .bg, .card, .panel, .badge, .card-icon, .chip, .step, .phone, .btn-ghost, .lang{
+      transition: background-color .6s ease, border-color .6s ease, box-shadow .6s ease, color .6s ease;
+    }
+
+    /* ============================================================================
+       3. ФОН: плавающие размытые цветные пятна
+       ============================================================================ */
+    .bg{
+      position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none;
+      background:
+        radial-gradient(1100px 700px at 12% -12%, rgba(var(--a1),.20), transparent 62%),
+        radial-gradient(900px 650px at 92% 4%,   rgba(var(--a2),.15), transparent 62%),
+        radial-gradient(900px 900px at 50% 120%, rgba(var(--a3),.13), transparent 65%);
+    }
+    .blob{ position: absolute; border-radius: 50%; filter: blur(90px); opacity: .5; animation: drift 22s ease-in-out infinite alternate; }
+    .blob-1{ width: 46vw; height: 46vw; left: -6vw; top: -8vh;  background: radial-gradient(circle, rgba(var(--a1),.85), transparent 68%); }
+    .blob-2{ width: 38vw; height: 38vw; right: -4vw; top: 18vh; background: radial-gradient(circle, rgba(var(--a2),.70), transparent 68%); animation-delay: -6s; }
+    .blob-3{ width: 34vw; height: 34vw; left: 28vw; bottom: -6vh; background: radial-gradient(circle, rgba(var(--a3),.55), transparent 70%); animation-delay: -12s; }
+    @keyframes drift{
+      from{ transform: translate3d(0,0,0) scale(1); }
+      to  { transform: translate3d(5vw,-5vh,0) scale(1.18); }
+    }
+
+    /* ============================================================================
+       4. ШАПКА
+       ============================================================================ */
+    .site-header{
+      position: sticky; top: 0; z-index: 50;
+      background: rgba(5,7,10,.62);
+      -webkit-backdrop-filter: blur(18px) saturate(180%); backdrop-filter: blur(18px) saturate(180%);
+      border-bottom: 1px solid var(--line);
+    }
+    .header-inner{ min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .brand{ display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
+    .brand img{ width: 34px; height: 34px; border-radius: 10px; box-shadow: 0 8px 22px rgba(var(--a1),.35), 0 0 0 1px rgba(255,255,255,.10) inset; }
+    .brand span{ font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+
+    /* Переключатель языка RU / EN */
+    .lang{
+      display: flex; align-items: center; gap: 2px; padding: 3px;
+      border: 1px solid var(--line); border-radius: 999px; background: var(--glass);
+      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    }
+    .lang button{
+      font: inherit; font-size: 13px; font-weight: 600; letter-spacing: .02em;
+      color: var(--muted); background: none; border: 0; cursor: pointer;
+      padding: 6px 13px; border-radius: 999px;
+      transition: color .25s, background .35s, box-shadow .35s;
+    }
+    .lang button:hover{ color: var(--text); }
+    .lang button[aria-pressed="true"]{
+      color: #fff; background: linear-gradient(120deg, rgba(var(--a1),.85), rgba(var(--a2),.75));
+      box-shadow: 0 6px 18px rgba(var(--a1),.35);
+    }
+
+    /* ============================================================================
+       5. ГЛАВНЫЙ ЭКРАН
+       ============================================================================ */
+    .hero{ min-height: 88vh; display: grid; place-items: center; text-align: center; padding: 84px 0 64px; }
+    .hero-logo{
+      width: 116px; height: 116px; margin: 0 auto 30px; border-radius: 28px;
+      animation: float 7s ease-in-out infinite;
+      box-shadow: 0 0 0 1px rgba(255,255,255,.10), 0 26px 70px rgba(var(--a1),.30);
+    }
+    @keyframes float{ 0%,100%{ transform: translateY(0); } 50%{ transform: translateY(-12px); } }
+    .hero h1{ margin: 0 0 18px; font-weight: 700; letter-spacing: -.035em; line-height: 1.02; font-size: clamp(52px, 10vw, 96px); }
+    .hero .slogan{ margin: 0 auto; max-width: 640px; color: var(--muted); font-size: clamp(17px, 2.3vw, 21px); line-height: 1.55; }
+    .hero .sub{ margin: 14px auto 0; max-width: 560px; color: rgba(153,163,178,.75); font-size: clamp(14px, 1.7vw, 16px); }
+
+    /* Плашка «Скоро» */
+    .badge{
+      display: inline-flex; align-items: center; gap: 9px; margin-top: 34px;
+      padding: 9px 18px; border-radius: 999px;
+      font-size: 14px; font-weight: 600; letter-spacing: .04em; color: #dff7ec;
+      background: linear-gradient(120deg, rgba(var(--a1),.22), rgba(var(--a2),.20));
+      border: 1px solid rgba(255,255,255,.16);
+      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+      box-shadow: 0 12px 34px rgba(0,0,0,.35), 0 0 34px rgba(var(--a2),.14);
+    }
+    .badge .dot{ width: 8px; height: 8px; border-radius: 50%; background: rgb(var(--a2)); animation: pulse 2.4s ease-out infinite; }
+    @keyframes pulse{
+      0%{ box-shadow: 0 0 0 0 rgba(var(--a2),.55); }
+      70%{ box-shadow: 0 0 0 12px rgba(var(--a2),0); }
+      100%{ box-shadow: 0 0 0 0 rgba(var(--a2),0); }
+    }
+
+    /* ============================================================================
+       6. ОБЩЕЕ ДЛЯ СЕКЦИЙ
+       ============================================================================ */
+    section{ padding: 76px 0; scroll-margin-top: 86px; }
+    .eyebrow{ margin: 0 0 14px; font-size: 13px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+    h2{ margin: 0 0 20px; font-weight: 700; letter-spacing: -.025em; line-height: 1.12; font-size: clamp(30px, 4.6vw, 46px); }
+    h3{ margin: 0 0 8px; font-size: 19px; font-weight: 600; letter-spacing: -.01em; }
+    .lead{ margin: 0; max-width: 760px; color: var(--muted); font-size: clamp(16px, 2vw, 19px); }
+    .lead + .lead{ margin-top: 16px; }
+    .note{ margin: 16px 0 0; color: rgba(153,163,178,.8); font-size: 15px; }
+
+    /* Стеклянная панель (универсальная) */
+    .panel{
+      border-radius: var(--radius); background: var(--glass); border: 1px solid var(--line);
+      -webkit-backdrop-filter: blur(var(--blur)) saturate(180%); backdrop-filter: blur(var(--blur)) saturate(180%);
+      box-shadow: 0 24px 60px rgba(0,0,0,.35);
+    }
+
+    /* Кнопки */
+    .btn-primary{
+      padding: 14px 26px; border-radius: 999px; border: 0; cursor: pointer;
+      font: inherit; font-weight: 600; color: #04121b;
+      background: linear-gradient(120deg, rgb(var(--a1)), rgb(var(--a2)));
+      box-shadow: 0 14px 34px rgba(var(--a1),.32);
+      transition: transform .35s cubic-bezier(.22,1,.36,1), box-shadow .35s;
+    }
+    .btn-primary:hover{ transform: translateY(-2px); box-shadow: 0 20px 44px rgba(var(--a1),.42); }
+    .btn-ghost{
+      display: inline-flex; align-items: center; gap: 10px; text-decoration: none;
+      padding: 13px 22px; border-radius: 999px; font-weight: 600; font-size: 15px;
+      color: var(--text); background: var(--glass); border: 1px solid var(--line);
+      -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+      transition: transform .35s cubic-bezier(.22,1,.36,1), border-color .35s, box-shadow .35s;
+    }
+    .btn-ghost:hover{ transform: translateY(-2px); border-color: rgba(var(--a2),.45); box-shadow: 0 16px 38px rgba(0,0,0,.4); }
+    .btn-ghost svg{ width: 18px; height: 18px; }
+
+    /* Появление при скролле */
+    .reveal{ opacity: 0; transform: translateY(26px); transition: opacity .9s cubic-bezier(.22,1,.36,1), transform .9s cubic-bezier(.22,1,.36,1); transition-delay: var(--d, 0ms); }
+    .reveal.in{ opacity: 1; transform: none; }
+    /* ============================================================================
+       7. СТЕКЛЯННЫЕ КАРТОЧКИ ВОЗМОЖНОСТЕЙ
+       ============================================================================ */
+    .cards{ display: grid; gap: 18px; margin-top: 42px; grid-template-columns: repeat(auto-fit, minmax(272px, 1fr)); }
+    .card{
+      position: relative; overflow: hidden; padding: 26px 24px 28px;
+      border-radius: var(--radius); background: var(--glass); border: 1px solid var(--line);
+      -webkit-backdrop-filter: blur(var(--blur)) saturate(180%); backdrop-filter: blur(var(--blur)) saturate(180%);
+      transition: transform .5s cubic-bezier(.22,1,.36,1), border-color .4s, box-shadow .5s;
+    }
+    .card::after{
+      content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .45s;
+      background: radial-gradient(420px 240px at var(--mx,50%) var(--my,0%), rgba(var(--a1),.16), transparent 70%);
+    }
+    .card:hover{ transform: translateY(-6px); border-color: rgba(255,255,255,.20); box-shadow: 0 26px 60px rgba(0,0,0,.45), 0 0 46px rgba(var(--a2),.10); }
+    .card:hover::after{ opacity: 1; }
+    .card-icon{
+      width: 46px; height: 46px; display: grid; place-items: center; margin-bottom: 18px;
+      border-radius: 14px; border: 1px solid rgba(255,255,255,.13);
+      background: linear-gradient(135deg, rgba(var(--a1),.28), rgba(var(--a2),.22)); color: #eaf6ff;
+      transition: transform .5s cubic-bezier(.22,1,.36,1), box-shadow .5s;
+    }
+    .card:hover .card-icon{ transform: scale(1.06); box-shadow: 0 10px 26px rgba(var(--a1),.30); }
+    .card-icon svg{ width: 22px; height: 22px; }
+    .card p{ margin: 0; color: var(--muted); font-size: 15.5px; line-height: 1.62; }
+
+    /* ============================================================================
+       8. ПЛАТФОРМЫ
+       ============================================================================ */
+    .platforms{ display: flex; flex-wrap: wrap; gap: 14px; margin-top: 38px; }
+    .platform{
+      flex: 1 1 200px; display: flex; align-items: center; gap: 14px;
+      padding: 18px 20px; border-radius: 22px;
+      background: var(--glass); border: 1px solid var(--line);
+      -webkit-backdrop-filter: blur(var(--blur)) saturate(180%); backdrop-filter: blur(var(--blur)) saturate(180%);
+      transition: transform .45s cubic-bezier(.22,1,.36,1), border-color .4s, box-shadow .45s;
+    }
+    .platform:hover{ transform: translateY(-4px); border-color: rgba(var(--a2),.40); box-shadow: 0 20px 44px rgba(0,0,0,.4); }
+    .platform svg{ width: 26px; height: 26px; flex: none; color: var(--text); }
+    .platform .p-name{ display: block; font-weight: 600; font-size: 16px; }
+    .platform .p-tag{ display: block; font-size: 13px; color: var(--muted); }
+
+    /* ============================================================================
+       9. КАК ЭТО РАБОТАЕТ: 3 ШАГА + СРАВНЕНИЕ
+       ============================================================================ */
+    .steps{ display: flex; align-items: stretch; gap: 14px; margin-top: 42px; }
+    .step{
+      flex: 1 1 0; padding: 26px 24px; border-radius: var(--radius);
+      background: var(--glass); border: 1px solid var(--line);
+      -webkit-backdrop-filter: blur(var(--blur)) saturate(180%); backdrop-filter: blur(var(--blur)) saturate(180%);
+      transition: transform .55s cubic-bezier(.22,1,.36,1), border-color .45s, box-shadow .45s, opacity .45s;
+      opacity: .55;
+    }
+    .step.active{
+      opacity: 1; transform: translateY(-8px);
+      border-color: rgba(var(--a2),.45);
+      box-shadow: 0 26px 60px rgba(0,0,0,.45), 0 0 50px rgba(var(--a2),.16);
+    }
+    .step-num{
+      width: 34px; height: 34px; display: grid; place-items: center; margin-bottom: 16px;
+      border-radius: 50%; font-weight: 700; font-size: 15px; color: var(--text);
+      background: rgba(255,255,255,.07); border: 1px solid var(--line);
+    }
+    .step.active .step-num{ color: #04121b; background: linear-gradient(120deg, rgb(var(--a1)), rgb(var(--a2))); border-color: transparent; }
+    .step h3{ margin-bottom: 6px; }
+    .step p{ margin: 0; color: var(--muted); font-size: 15px; line-height: 1.6; }
+    .step-arrow{ display: grid; place-items: center; color: rgba(255,255,255,.28); font-size: 22px; }
+    .step-arrow svg{ width: 24px; height: 24px; }
+
+    /* Таблица сравнения */
+    .compare{ margin-top: 34px; overflow: hidden; }
+    .compare-head, .compare-row{ display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; align-items: center; padding: 18px 26px; }
+    .compare-head{ border-bottom: 1px solid var(--line); font-size: 14px; font-weight: 700; letter-spacing: .02em; }
+    .compare-head .c-plain{ color: var(--muted); }
+    .compare-head .c-tngram{ color: transparent; background: linear-gradient(100deg, var(--a1-soft), var(--a2-soft)); -webkit-background-clip: text; background-clip: text; }
+    .compare-row{ border-bottom: 1px solid var(--line); font-size: 15px; }
+    .compare-row:last-child{ border-bottom: 0; }
+    .compare-row .c-label{ color: var(--muted); }
+    .compare-row .c-plain{ color: rgba(255,140,140,.9); }
+    .compare-row .c-tngram{ color: rgb(var(--a2)); font-weight: 600; }
+
+    /* ============================================================================
+       10. МОКАП ПРИЛОЖЕНИЯ (телефон + сервер)
+       ============================================================================ */
+    .app-demo{ display: flex; align-items: center; justify-content: center; gap: 34px; margin-top: 46px; flex-wrap: wrap; }
+
+    /* Телефон */
+    .phone{
+      width: 292px; flex: none; padding: 10px; border-radius: 44px; position: relative;
+      background: linear-gradient(160deg, rgba(255,255,255,.16), rgba(255,255,255,.04));
+      border: 1px solid var(--line); box-shadow: 0 40px 90px rgba(0,0,0,.6), 0 0 60px rgba(var(--a1),.14);
+    }
+    .phone-screen{
+      height: 560px; display: flex; flex-direction: column; overflow: hidden;
+      border-radius: 36px; border: 1px solid rgba(255,255,255,.06);
+      background: linear-gradient(180deg, #090d15, #05070a);
+    }
+    .phone-bar{ display: flex; align-items: center; gap: 10px; padding: 16px 16px 14px; border-bottom: 1px solid var(--line); }
+    .phone-bar img{ width: 26px; height: 26px; border-radius: 8px; }
+    .phone-bar b{ font-size: 15px; font-weight: 600; }
+    .phone-bar small{ display: block; color: rgb(var(--a2)); font-size: 11.5px; font-weight: 600; }
+    .chat{ flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 12px; padding: 18px 16px; }
+    .msg{
+      position: relative; max-width: 82%; padding: 10px 14px; border-radius: 18px;
+      font-size: 14px; line-height: 1.45; opacity: 0; transform: translateY(10px);
+      transition: opacity .5s, transform .5s;
+    }
+    .msg.in{ opacity: 1; transform: none; }
+    .msg.them{ align-self: flex-start; background: rgba(255,255,255,.07); border: 1px solid var(--line); border-bottom-left-radius: 6px; }
+    .msg.me{
+      align-self: flex-end; color: #04121b; border-bottom-right-radius: 6px;
+      background: linear-gradient(120deg, rgb(var(--a1)), rgb(var(--a2)));
+    }
+    .msg-note{
+      display: block; margin-top: 6px; font-size: 11px; font-weight: 600; letter-spacing: .02em;
+      color: rgb(var(--a2)); opacity: 0; transition: opacity .5s;
+    }
+    .msg.me.saved .msg-note{ opacity: 1; }
+    .phone-input{ display: flex; align-items: center; gap: 10px; padding: 14px 16px 18px; border-top: 1px solid var(--line); }
+    .phone-input span{ flex: 1; color: rgba(153,163,178,.65); font-size: 13.5px; }
+    .phone-input i{ width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(120deg, rgb(var(--a1)), rgb(var(--a2))); }
+
+    /* Панель сервера */
+    .server{ width: 320px; flex: none; padding: 22px; border-radius: var(--radius);
+      background: var(--glass); border: 1px solid var(--line);
+      -webkit-backdrop-filter: blur(var(--blur)) saturate(180%); backdrop-filter: blur(var(--blur)) saturate(180%);
+      box-shadow: 0 24px 60px rgba(0,0,0,.4);
+    }
+    .server-head{ display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+    .server-head svg{ width: 20px; height: 20px; color: var(--muted); }
+    .server-head b{ font-size: 15px; }
+    .server-body{ min-height: 112px; display: grid; place-items: center; padding: 16px; border-radius: 18px;
+      border: 1px dashed rgba(255,255,255,.14); background: rgba(0,0,0,.25); }
+    .server-msg{
+      width: 100%; padding: 12px 14px; border-radius: 14px; font-size: 13.5px;
+      background: rgba(255,255,255,.06); border: 1px solid var(--line);
+      opacity: 0; transform: translateY(8px) scale(.98); transition: opacity .5s, transform .5s, filter .5s;
+    }
+    .server-msg.show{ opacity: 1; transform: none; }
+    .server-msg.deleted{ opacity: .32; filter: grayscale(.6); }
+    .server-msg.deleted .txt{ text-decoration: line-through; }
+    .server-empty{ color: rgba(153,163,178,.55); font-size: 13.5px; }
+    .server-msg.show ~ .server-empty{ display: none; }
+    .server-status{ display: flex; align-items: center; gap: 9px; margin-top: 16px; font-size: 13.5px; color: var(--muted); min-height: 22px; }
+    .server-status .sdot{ width: 8px; height: 8px; border-radius: 50%; background: rgb(var(--a1)); box-shadow: 0 0 12px rgba(var(--a1),.8); }
+    /* ============================================================================
+       11. ТЕМЫ ОФОРМЛЕНИЯ
+       ============================================================================ */
+    .theme-options{ display: flex; flex-wrap: wrap; gap: 14px; margin-top: 34px; }
+    .theme-btn{
+      display: flex; align-items: center; gap: 14px; cursor: pointer;
+      padding: 16px 22px; border-radius: 20px; font: inherit; font-size: 15px; font-weight: 600;
+      color: var(--text); background: var(--glass); border: 1px solid var(--line);
+      -webkit-backdrop-filter: blur(var(--blur)); backdrop-filter: blur(var(--blur));
+      transition: transform .4s cubic-bezier(.22,1,.36,1), border-color .35s, box-shadow .4s, opacity .35s;
+    }
+    .theme-btn:hover{ transform: translateY(-3px); }
+    .theme-btn[aria-pressed="true"]{ border-color: rgba(var(--a2),.55); box-shadow: 0 18px 44px rgba(0,0,0,.45), 0 0 40px rgba(var(--a2),.16); }
+    .swatch{ width: 34px; height: 34px; border-radius: 12px; border: 1px solid rgba(255,255,255,.16); }
+    .swatch.t-dark{ background: linear-gradient(135deg, #2f7bff, #00e08f); }
+    .swatch.t-green{ background: linear-gradient(135deg, #00c484, #8ad62a); }
+    .swatch.t-blue{ background: linear-gradient(135deg, #3b82f6, #8b5cf6); }
+
+    /* ============================================================================
+       12. ЧЕГО МЫ НЕ СОБИРАЕМ
+       ============================================================================ */
+    .nocollect{ display: grid; gap: 16px; margin-top: 38px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    .nc-item{
+      display: flex; gap: 16px; padding: 22px; border-radius: 22px;
+      background: var(--glass); border: 1px solid var(--line);
+      -webkit-backdrop-filter: blur(var(--blur)) saturate(180%); backdrop-filter: blur(var(--blur)) saturate(180%);
+      transition: transform .45s cubic-bezier(.22,1,.36,1), border-color .4s;
+    }
+    .nc-item:hover{ transform: translateY(-4px); border-color: rgba(var(--a2),.35); }
+    .nc-icon{ width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: 12px;
+      background: rgba(255,110,110,.12); border: 1px solid rgba(255,110,110,.25); color: #ff9a9a; }
+    .nc-icon svg{ width: 18px; height: 18px; }
+    .nc-item h3{ font-size: 17px; }
+    .nc-item p{ margin: 0; color: var(--muted); font-size: 14.5px; line-height: 1.6; }
+
+    /* ============================================================================
+       13. FAQ
+       ============================================================================ */
+    .faq{ margin-top: 34px; }
+    .faq-item{ border-radius: 20px; background: var(--glass); border: 1px solid var(--line); margin-bottom: 12px; overflow: hidden;
+      -webkit-backdrop-filter: blur(var(--blur)) saturate(180%); backdrop-filter: blur(var(--blur)) saturate(180%); }
+    .faq-item summary{
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 20px 24px; cursor: pointer; font-size: 17px; font-weight: 600; list-style: none;
+    }
+    .faq-item summary::-webkit-details-marker{ display: none; }
+    .faq-item summary::after{ content: "+"; font-size: 24px; font-weight: 400; color: var(--a2-soft); transition: transform .35s; }
+    .faq-item[open] summary::after{ transform: rotate(45deg); }
+    .faq-item[open]{ border-color: rgba(var(--a2),.3); }
+    .faq-answer{ padding: 0 24px 22px; color: var(--muted); font-size: 15.5px; line-height: 1.65; }
+
+    /* ============================================================================
+       14. ДОРОЖНАЯ КАРТА (таймлайн)
+       ============================================================================ */
+    .timeline{ position: relative; margin-top: 40px; padding-left: 30px; }
+    .timeline::before{ content: ""; position: absolute; left: 8px; top: 10px; bottom: 10px; width: 2px;
+      background: linear-gradient(180deg, rgba(var(--a2),.7), rgba(var(--a1),.35), transparent); }
+    .tl-item{ position: relative; margin-bottom: 16px; padding: 20px 24px; border-radius: 22px;
+      background: var(--glass); border: 1px solid var(--line);
+      -webkit-backdrop-filter: blur(var(--blur)) saturate(180%); backdrop-filter: blur(var(--blur)) saturate(180%);
+      transition: transform .45s cubic-bezier(.22,1,.36,1), border-color .4s; }
+    .tl-item:hover{ transform: translateX(4px); border-color: rgba(255,255,255,.2); }
+    .tl-item::before{ content: ""; position: absolute; left: -30px; top: 28px; width: 18px; height: 18px; border-radius: 50%;
+      background: var(--bg); border: 2px solid rgba(var(--a1),.7); }
+    .tl-item[data-status="done"]::before{ background: rgb(var(--a2)); border-color: transparent; box-shadow: 0 0 16px rgba(var(--a2),.75); }
+    .tl-item[data-status="progress"]::before{ background: linear-gradient(120deg, rgb(var(--a1)), rgb(var(--a2))); border-color: transparent; animation: pulse 2.4s ease-out infinite; }
+    .tl-item p{ margin: 0; color: var(--muted); font-size: 15px; }
+    .status-chip{ display: inline-block; margin-bottom: 8px; padding: 5px 12px; border-radius: 999px;
+      font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+      border: 1px solid var(--line); color: var(--muted); background: rgba(255,255,255,.05); }
+    .status-chip[data-status="done"]{ color: rgb(var(--a2)); border-color: rgba(var(--a2),.4); background: rgba(var(--a2),.10); }
+    .status-chip[data-status="progress"]{ color: var(--a1-soft); border-color: rgba(var(--a1),.4); background: rgba(var(--a1),.12); }
+
+    /* Строки статуса (кратко о проекте) */
+    .status-panel{ margin-top: 26px; padding: 6px 30px; }
+    .row{ display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 20px;
+      padding: 18px 0; border-bottom: 1px solid var(--line); }
+    .row:last-child{ border-bottom: 0; }
+    .row-label{ color: var(--muted); font-size: 15px; }
+    .row-value{ font-size: 16px; font-weight: 600; }
+    .row-value.accent{ color: transparent; background: linear-gradient(100deg, var(--a1-soft), var(--a2-soft)); -webkit-background-clip: text; background-clip: text; }
+
+    /* ============================================================================
+       15. ПОДПИСКА
+       ============================================================================ */
+    .subscribe-grid{ display: grid; gap: 20px; margin-top: 38px; grid-template-columns: 1.25fr .75fr; align-items: start; }
+    .subscribe-card{ padding: 34px; border-radius: 32px; display: grid; gap: 16px; }
+    .form-row{ display: flex; gap: 12px; flex-wrap: wrap; }
+    .field{ flex: 1 1 260px; display: flex; align-items: center; gap: 10px; padding: 14px 20px;
+      border-radius: 999px; background: rgba(255,255,255,.05); border: 1px solid var(--line); }
+    .field:focus-within{ border-color: rgba(var(--a2),.5); box-shadow: 0 0 0 4px rgba(var(--a2),.10); }
+    .field input{ flex: 1; min-width: 0; background: none; border: 0; outline: none; color: var(--text); font: inherit; }
+    .field input::placeholder{ color: rgba(153,163,178,.6); }
+    .form-status{ min-height: 22px; font-size: 14px; color: var(--muted); }
+    .form-status.ok{ color: rgb(var(--a2)); }
+    .form-status.err{ color: #ff9a9a; }
+    .counter{ display: inline-flex; align-items: center; gap: 10px; align-self: start; padding: 9px 16px; border-radius: 999px;
+      font-size: 14px; font-weight: 600; color: var(--a2-soft);
+      background: rgba(var(--a2),.10); border: 1px solid rgba(var(--a2),.28); }
+    .side-card{ padding: 28px; border-radius: 28px; display: grid; gap: 14px; }
+    .side-card p{ margin: 0; color: var(--muted); font-size: 14.5px; }
+    .side-card .btn-ghost{ justify-content: center; }
+
+    /* ============================================================================
+       16. ПОДВАЛ И ПЛАВАЮЩАЯ КНОПКА
+       ============================================================================ */
+    .site-footer{ margin-top: 40px; padding: 34px 0 44px; border-top: 1px solid var(--line); }
+    .footer-inner{ display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+    .footer-brand{ display: flex; align-items: center; gap: 10px; }
+    .footer-brand img{ width: 26px; height: 26px; border-radius: 8px; }
+    .footer-brand span{ font-weight: 600; }
+    .footer-meta{ color: var(--muted); font-size: 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .footer-meta .sep{ opacity: .45; }
+    .footer-links{ display: flex; gap: 12px; }
+    .footer-links a{ color: var(--muted); font-size: 14px; text-decoration: none; transition: color .3s; }
+    .footer-links a:hover{ color: var(--a2-soft); }
+
+    .fab{
+      position: fixed; right: 22px; bottom: 22px; z-index: 60; text-decoration: none;
+      opacity: 0; pointer-events: none; transform: translateY(14px);
+      transition: opacity .4s, transform .4s, box-shadow .35s;
+    }
+    .fab.show{ opacity: 1; pointer-events: auto; transform: none; }
+
+    /* ============================================================================
+       17. АДАПТИВНОСТЬ
+       ============================================================================ */
+    @media (max-width: 900px){
+      .subscribe-grid{ grid-template-columns: 1fr; }
+    }
+    @media (max-width: 760px){
+      .hero{ min-height: 78vh; padding: 56px 0 44px; }
+      .hero-logo{ width: 88px; height: 88px; border-radius: 22px; margin-bottom: 24px; }
+      section{ padding: 58px 0; }
+      .status-panel{ padding: 4px 20px; }
+      .row{ flex-direction: column; align-items: flex-start; }
+      .steps{ flex-direction: column; }
+      .step{ opacity: 1; }
+      .step-arrow{ transform: rotate(90deg); padding: 2px 0; }
+      .compare-head, .compare-row{ grid-template-columns: 1fr 1fr; padding: 16px 18px; }
+      .compare-head span:first-child{ display: none; }
+      .compare-row .c-label{ grid-column: 1 / -1; font-size: 13.5px; }
+      .app-demo{ gap: 24px; }
+      .phone{ width: 100%; max-width: 292px; }
+      .phone-screen{ height: 470px; }
+      .server{ width: 100%; max-width: 292px; }
+      .subscribe-card, .side-card{ padding: 24px; border-radius: 26px; }
+      .fab{ right: 14px; bottom: 14px; padding: 12px 20px; font-size: 14px; }
+    }
+
+    /* Уважаем настройку «меньше движения» */
+    @media (prefers-reduced-motion: reduce){
+      *{ animation: none !important; transition: none !important; }
+      .reveal{ opacity: 1 !important; transform: none !important; }
+      html{ scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Фоновые цветные пятна -->
+  <div class="bg" aria-hidden="true">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+
+  <!-- ==========================================================================
+       ШАПКА: логотип, название, переключатель языка
+       ========================================================================== -->
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="#top">
+        <img src="icon.png" alt="" data-logo/>
+        <span data-i18n="brand">Тнграм</span>
+      </a>
+      <div class="lang" role="group" aria-label="Language" id="lang-switch">
+        <button type="button" data-lang="ru" aria-pressed="true">RU</button>
+        <button type="button" data-lang="en" aria-pressed="false">EN</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- ========================================================================
+         ГЛАВНЫЙ ЭКРАН
+         ======================================================================== -->
+    <section class="hero wrap">
+      <div>
+        <img class="hero-logo" src="icon.png" alt="Тнграм" data-logo/>
+        <h1 class="gradient-text" data-i18n="hero.title">Тнграм</h1>
+        <p class="slogan" data-i18n="hero.slogan"></p>
+        <p class="sub" data-i18n="hero.sub"></p>
+        <div class="badge"><span class="dot" aria-hidden="true"></span><span data-i18n="hero.badge"></span></div>
+      </div>
+    </section>
+
+    <!-- ========================================================================
+         ЧТО ЭТО
+         ======================================================================== -->
+    <section class="wrap reveal" id="about">
+      <p class="eyebrow gradient-text" data-i18n="about.eyebrow"></p>
+      <h2 data-i18n="about.title"></h2>
+      <p class="lead" data-i18n="about.p1"></p>
+      <p class="lead" data-i18n="about.p2"></p>
+    </section>
+
+    <!-- ========================================================================
+         ВОЗМОЖНОСТИ (карточки рисуются из TEXTS)
+         ======================================================================== -->
+    <section class="wrap" id="features">
+      <div class="reveal">
+        <p class="eyebrow gradient-text" data-i18n="features.eyebrow"></p>
+        <h2 data-i18n="features.title"></h2>
+      </div>
+      <div class="cards" id="cards"></div>
+    </section>
+
+    <!-- ========================================================================
+         ПЛАТФОРМЫ
+         ======================================================================== -->
+    <section class="wrap" id="platforms">
+      <div class="reveal">
+        <p class="eyebrow gradient-text" data-i18n="platforms.eyebrow"></p>
+        <h2 data-i18n="platforms.title"></h2>
+        <p class="lead" data-i18n="platforms.lead"></p>
+      </div>
+      <div class="platforms" id="platform-list"></div>
+    </section>
+    <!-- ========================================================================
+         КАК ЭТО РАБОТАЕТ: 3 шага + сравнение
+         ======================================================================== -->
+    <section class="wrap" id="how">
+      <div class="reveal">
+        <p class="eyebrow gradient-text" data-i18n="how.eyebrow"></p>
+        <h2 data-i18n="how.title"></h2>
+        <p class="lead" data-i18n="how.lead"></p>
+      </div>
+      <div class="steps" id="steps"></div>
+
+      <div class="reveal" style="margin-top:52px">
+        <h3 style="font-size:clamp(20px,2.6vw,26px)" data-i18n="how.compareTitle"></h3>
+      </div>
+      <div class="compare panel reveal" id="compare"></div>
+    </section>
+
+    <!-- ========================================================================
+         МОКАП ПРИЛОЖЕНИЯ: сообщение уходит на сервер и удаляется
+         ======================================================================== -->
+    <section class="wrap" id="demo">
+      <div class="reveal">
+        <p class="eyebrow gradient-text" data-i18n="mockup.eyebrow"></p>
+        <h2 data-i18n="mockup.title"></h2>
+        <p class="lead" data-i18n="mockup.lead"></p>
+      </div>
+
+      <div class="app-demo reveal">
+        <!-- Экран телефона -->
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="phone-bar">
+              <img src="icon.png" alt="" data-logo/>
+              <div>
+                <b data-i18n="brand">Тнграм</b>
+                <small data-i18n="mockup.online"></small>
+              </div>
+            </div>
+            <div class="chat" id="chat"></div>
+            <div class="phone-input"><span data-i18n="mockup.inputPlaceholder"></span><i aria-hidden="true"></i></div>
+          </div>
+        </div>
+
+        <!-- Панель сервера -->
+        <div class="server">
+          <div class="server-head">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="7" rx="2.2"/><rect x="3" y="13" width="18" height="7" rx="2.2"/>
+              <path d="M7 7.5h.01M7 16.5h.01"/>
+            </svg>
+            <b data-i18n="mockup.serverTitle"></b>
+          </div>
+          <div class="server-body">
+            <div class="server-msg" id="server-msg"><span class="txt"></span></div>
+            <span class="server-empty" id="server-empty" data-i18n="mockup.serverEmpty"></span>
+          </div>
+          <div class="server-status"><span class="sdot" aria-hidden="true"></span><span id="server-status-text"></span></div>
+        </div>
+      </div>
+    </section>
+    <!-- ========================================================================
+         ТЕМЫ ОФОРМЛЕНИЯ (клик меняет цвета сайта)
+         ======================================================================== -->
+    <section class="wrap" id="themes">
+      <div class="reveal">
+        <p class="eyebrow gradient-text" data-i18n="themes.eyebrow"></p>
+        <h2 data-i18n="themes.title"></h2>
+        <p class="lead" data-i18n="themes.lead"></p>
+      </div>
+      <div class="theme-options reveal" id="theme-options" role="group" aria-label="Theme"></div>
+      <p class="note reveal" data-i18n="themes.note"></p>
+    </section>
+
+    <!-- ========================================================================
+         ЧЕГО МЫ НЕ СОБИРАЕМ
+         ======================================================================== -->
+    <section class="wrap" id="privacy">
+      <div class="reveal">
+        <p class="eyebrow gradient-text" data-i18n="nocollect.eyebrow"></p>
+        <h2 data-i18n="nocollect.title"></h2>
+        <p class="lead" data-i18n="nocollect.lead"></p>
+      </div>
+      <div class="nocollect" id="nocollect"></div>
+    </section>
+
+    <!-- ========================================================================
+         FAQ
+         ======================================================================== -->
+    <section class="wrap" id="faq">
+      <div class="reveal">
+        <p class="eyebrow gradient-text" data-i18n="faq.eyebrow"></p>
+        <h2 data-i18n="faq.title"></h2>
+      </div>
+      <div class="faq" id="faq-list"></div>
+    </section>
+
+    <!-- ========================================================================
+         СТАТУС И ДОРОЖНАЯ КАРТА
+         ======================================================================== -->
+    <section class="wrap" id="roadmap">
+      <div class="reveal">
+        <p class="eyebrow gradient-text" data-i18n="roadmap.eyebrow"></p>
+        <h2 data-i18n="roadmap.title"></h2>
+        <p class="lead" data-i18n="roadmap.lead"></p>
+      </div>
+      <div class="timeline" id="timeline"></div>
+      <div class="status-panel panel reveal" id="status-rows"></div>
+    </section>
+
+    <!-- ========================================================================
+         ПОДПИСКА
+         ======================================================================== -->
+    <section class="wrap" id="subscribe">
+      <div class="reveal">
+        <p class="eyebrow gradient-text" data-i18n="subscribe.eyebrow"></p>
+        <h2 data-i18n="subscribe.title"></h2>
+        <p class="lead" data-i18n="subscribe.lead"></p>
+      </div>
+
+      <div class="subscribe-grid">
+        <!-- Форма -->
+        <form class="subscribe-card panel reveal" id="subscribe-form" novalidate>
+          <span class="counter" id="counter" hidden></span>
+          <div class="form-row">
+            <label class="field">
+              <input type="email" id="email" name="email" autocomplete="email" data-i18n-placeholder="subscribe.placeholder" aria-label="Email"/>
+            </label>
+            <button class="btn-primary" type="submit" data-i18n="subscribe.button"></button>
+          </div>
+          <p class="form-status" id="form-status" role="status" aria-live="polite"></p>
+          <p class="note" style="margin:0" data-i18n="subscribe.note"></p>
+        </form>
+
+        <!-- Ссылки на проект -->
+        <div class="side-card panel reveal">
+          <h3 data-i18n="subscribe.followTitle"></h3>
+          <p data-i18n="subscribe.followText"></p>
+          <a class="btn-ghost" id="link-telegram" href="#" target="_blank" rel="noopener" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4 3 11l5 2 2 6 3.5-4.5L19 19z"/></svg>
+            <span data-i18n="subscribe.telegram"></span>
+          </a>
+          <a class="btn-ghost" id="link-github" href="#" target="_blank" rel="noopener" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.9a3.4 3.4 0 0 0-1-2.6c3-.3 6.2-1.5 6.2-6.8A5.3 5.3 0 0 0 19.8 5a5 5 0 0 0-.1-3.6s-1.2-.4-3.9 1.4a13.3 13.3 0 0 0-7 0C6.1 1.1 4.9 1.4 4.9 1.4A5 5 0 0 0 4.8 5 5.3 5.3 0 0 0 3.3 8.7c0 5.3 3.2 6.5 6.2 6.8a3.4 3.4 0 0 0-1 2.6V22"/></svg>
+            <span data-i18n="subscribe.github"></span>
+          </a>
+          <p class="note" id="links-hint" style="margin:0" data-i18n="subscribe.linksHint"></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Плавающая кнопка «Подписаться» -->
+  <a class="fab btn-primary" href="#subscribe" id="fab" data-i18n="subscribe.button">Подписаться</a>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <div class="footer-brand">
+        <img src="icon.png" alt="" data-logo/>
+        <span data-i18n="brand">Тнграм</span>
+      </div>
+      <div class="footer-links">
+        <a id="foot-telegram" href="#" target="_blank" rel="noopener" hidden data-i18n="subscribe.telegram"></a>
+        <a id="foot-github" href="#" target="_blank" rel="noopener" hidden data-i18n="subscribe.github"></a>
+      </div>
+      <div class="footer-meta">
+        <span>© <span id="year">2026</span></span>
+        <span class="sep">·</span>
+        <span data-i18n="footer.tagline"></span>
+      </div>
+    </div>
+  </footer>
+  <script>
+  /* ===========================================================================
+     НАСТРОЙКИ — здесь только то, что не переводится
+     =========================================================================== */
+  const CONFIG = {
+    /* Куда уходят подписки. Оставь пустым — откроется почтовый клиент с готовым письмом.
+       Если подключишь бесплатный сервис форм (например Formspree или Getform),
+       просто вставь сюда ссылку вида 'https://formspree.io/f/xxxxxxx'. */
+    subscribeEndpoint: '',
+
+    /* Куда писать, если форма не подключена (замени на свою почту) */
+    contactEmail: 'hello@example.com',
+
+    /* Ссылки на проект. Вставь свои — кнопки включатся сами. Пусто = кнопка скрыта. */
+    links: {
+      telegram: '',   // например 'https://t.me/tngram'
+      github:   ''    // например 'https://github.com/username/TNGram'
+    },
+
+    /* Счётчик «Нас уже N». Показывается ТОЛЬКО если тут реальное число.
+       Оставь null, чтобы не показывать ничего. Не выдумывай цифры. */
+    subscribersCount: null
+  };
+
+  /* ===========================================================================
+     ТЕКСТЫ САЙТА — меняй только здесь.
+     Формат: { ru: {...}, en: {...} }. Разметку трогать не нужно.
+     =========================================================================== */
+  const TEXTS = {
+    ru: {
+      meta: {
+        title: "Тнграм — приватный мессенджер",
+        description: "Тнграм — приватный мессенджер. Сообщение доставлено и сразу удалено с сервера. Переписка хранится только на твоём устройстве."
+      },
+      brand: "Тнграм",
+      hero: {
+        title: "Тнграм",
+        slogan: "Приватный мессенджер. Сообщение уходит на сервер, доставляется получателю — и сразу удаляется с сервера.",
+        sub: "Переписка остаётся только у тебя. Без номера телефона, без лишних следов.",
+        badge: "Скоро"
+      },
+      about: {
+        eyebrow: "О мессенджере",
+        title: "Что это",
+        p1: "Тнграм — это мессенджер, который не хранит вашу переписку. Сообщение уходит на сервер, передаётся получателю и после доставки удаляется с сервера.",
+        p2: "Всё, что вы написали и получили, остаётся только на ваших устройствах — и удалить это можно в любой момент."
+      },
+      features: {
+        eyebrow: "Возможности",
+        title: "Что внутри",
+        items: [
+          { title: "Максимальная приватность",
+            text: "Сообщение уходит на сервер, передаётся получателю и после доставки удаляется с сервера." },
+          { title: "Всё хранится на твоём устройстве",
+            text: "История переписки живёт только на вашем устройстве — удалить её можно в любой момент." },
+          { title: "Регистрация без номера телефона",
+            text: "Никакого номера телефона и лишних данных — только аккаунт, который принадлежит вам." },
+          { title: "Серверу нечего отдавать",
+            text: "Сервер не хранит переписку, поэтому по запросу передать просто нечего." },
+          { title: "Современный визуал",
+            text: "Красивые темы оформления, аккуратная типографика и плавные анимации." }
+        ]
+      },
+      platforms: {
+        eyebrow: "Платформы",
+        title: "Где будет Тнграм",
+        lead: "Планируем выпустить на всех основных платформах. Сроков пока не называем — чтобы не обещать лишнего.",
+        tag: "Планируется",
+        items: ["Android", "Windows 11", "Linux", "Веб-версия"]
+      },
+      how: {
+        eyebrow: "Как это работает",
+        title: "Три шага — и на сервере ничего не остаётся",
+        lead: "Сообщение живёт на сервере доли секунды: ровно столько, сколько нужно, чтобы дойти до получателя.",
+        steps: [
+          { title: "Ты отправляешь", text: "Сообщение уходит с твоего устройства на сервер. Копия остаётся только у тебя." },
+          { title: "Сервер передаёт", text: "Сервер находит получателя и отправляет ему сообщение." },
+          { title: "Сервер удаляет", text: "Как только сообщение доставлено, оно удаляется с сервера. Отдать по запросу нечего." }
+        ],
+        compareTitle: "Где лежит переписка",
+        comparePlain: "Обычный мессенджер",
+        compareTngram: "Тнграм",
+        compare: [
+          { label: "Переписка на сервере", plain: "Хранится", tngram: "Не хранится" },
+          { label: "Что отдадут по запросу", plain: "Всю историю", tngram: "Нечего отдавать" },
+          { label: "Удаление сообщений", plain: "Вручную, копия может остаться", tngram: "Сразу после доставки" },
+          { label: "Номер телефона", plain: "Обязательно", tngram: "Не нужен" }
+        ]
+      },
+      mockup: {
+        eyebrow: "Как это выглядит",
+        title: "Сообщение и сервер",
+        lead: "Смотри: сообщение появляется в чате, на секунду заглядывает на сервер — и исчезает с него. В чате оно остаётся только у тебя.",
+        online: "приватный чат",
+        inputPlaceholder: "Сообщение…",
+        serverTitle: "Сервер Тнграм",
+        serverEmpty: "Переписки нет",
+        statuses: ["Отправляется…", "Передано получателю", "Удалено с сервера"],
+        savedNote: "хранится только у тебя",
+        chat: [
+          { from: "them", text: "Привет! Это Тнграм?" },
+          { from: "me",   text: "Да! Пишу тебе с телефона." }
+        ]
+      },
+      themes: {
+        eyebrow: "Темы оформления",
+        title: "Выбери свой цвет",
+        lead: "Нажми на тему — сайт перекрасится. Так же будет выглядеть и приложение.",
+        note: "Это демонстрация: так разные темы будут выглядеть в мессенджере.",
+        options: [
+          { id: "dark",  name: "Тёмная" },
+          { id: "green", name: "Зелёная" },
+          { id: "blue",  name: "Синяя" }
+        ]
+      },
+      nocollect: {
+        eyebrow: "Приватность",
+        title: "Чего мы не собираем",
+        lead: "Мы не храним то, что нам не нужно. Если данных нет — их нельзя потерять или передать.",
+        items: [
+          { title: "Номер телефона", text: "Регистрация без номера. Привязать телефон к аккаунту нельзя." },
+          { title: "Контакты из телефонной книги", text: "Мы не читаем список контактов и не загружаем его на сервер." },
+          { title: "Историю переписки на сервере", text: "Сообщения удаляются с сервера сразу после доставки." }
+        ]
+      },
+      faq: {
+        eyebrow: "Вопросы",
+        title: "Частые вопросы",
+        items: [
+          { q: "Когда выйдет мессенджер?",
+            a: "Даты пока нет. Сейчас реализована только передача сообщений. Чтобы узнать первым, подпишись на обновления внизу страницы." },
+          { q: "Что если сервер упадёт?",
+            a: "Мы хотим, чтобы сообщения не терялись: пока сообщение не передано, оно остаётся на твоём устройстве и отправится, когда сервер снова будет доступен." },
+          { q: "Что будет при смене телефона?",
+            a: "Честно: переписка хранится только на устройстве, поэтому сама она не перенесётся. Мы думаем над аккуратным способом переноса — чтобы копии при этом не оказались на сервере." },
+          { q: "Можно ли восстановить переписку?",
+            a: "Нет. Если удалить переписку или потерять устройство, восстановить её нельзя — на сервере копии нет. Это и есть цена приватности." },
+          { q: "Нужен ли номер телефона?",
+            a: "Нет. Аккаунт создаётся без номера телефона и без списка контактов." },
+          { q: "Увидят ли переписку по запросу?",
+            a: "Сервер не хранит переписку, поэтому передать по запросу нечего. То, что уже доставлено, остаётся только на устройствах участников." }
+        ]
+      },
+      roadmap: {
+        eyebrow: "Статус",
+        title: "Дорожная карта",
+        lead: "Мессенджер ещё в разработке. Даты выхода пока нет, анонсов тоже пока нет.",
+        chips: { done: "Готово", progress: "В работе", next: "Дальше" },
+        items: [
+          { status: "done",     title: "Передача сообщений", text: "Сообщение уходит, доставляется и удаляется с сервера." },
+          { status: "progress", title: "Стабильность и скорость", text: "Работаем над тем, чтобы передача была быстрой и надёжной." },
+          { status: "next",     title: "Приложения для Android и Windows", text: "Планируем клиенты для телефона и компьютера." },
+          { status: "next",     title: "Групповые чаты, фото и файлы", text: "Переписки с несколькими людьми и вложения." },
+          { status: "next",     title: "Темы оформления", text: "Несколько тем на выбор — как в демонстрации выше." }
+        ],
+        rows: [
+          { label: "Что уже готово", value: "Передача сообщений", accent: true },
+          { label: "Дата выхода",    value: "Пока не известна" },
+          { label: "Анонсы",         value: "Пока нет" }
+        ]
+      },
+      subscribe: {
+        eyebrow: "Обновления",
+        title: "Узнать о выходе",
+        lead: "Оставь почту — напишем один раз, когда мессенджер будет готов.",
+        placeholder: "почта@example.com",
+        button: "Подписаться",
+        note: "Почту используем только для новости о выходе. Никакого спама и рассылок.",
+        success: "Готово! Напишем, когда мессенджер выйдет.",
+        error: "Проверь адрес почты.",
+        mailtoSubject: "Подписка на новости Тнграм",
+        mailtoBody: "Здравствуйте! Хочу узнать о выходе Тнграм.\n\nМоя почта: ",
+        counter: "Нас уже %n",
+        followTitle: "Следи за проектом",
+        followText: "Новости появятся здесь. Ссылки добавим, как только всё будет готово.",
+        telegram: "Канал в Telegram",
+        github: "Открытый код",
+        linksHint: "Ссылки пока не добавлены."
+      },
+      footer: { tagline: "Скоро" }
+    },
+    en: {
+      meta: {
+        title: "Tngram — a private messenger",
+        description: "Tngram is a private messenger. A message reaches the server, is delivered — and is deleted from the server right away. Your chats stay only on your device."
+      },
+      brand: "Tngram",
+      hero: {
+        title: "Tngram",
+        slogan: "A private messenger. A message goes to the server, reaches the recipient — and is deleted from the server right away.",
+        sub: "Your chats stay with you only. No phone number, no unnecessary traces.",
+        badge: "Coming soon"
+      },
+      about: {
+        eyebrow: "The messenger",
+        title: "What it is",
+        p1: "Tngram is a messenger that does not store your chats. A message goes to the server, is passed to the recipient and is deleted from the server after delivery.",
+        p2: "Everything you write and receive stays on your devices only — and you can delete it at any moment."
+      },
+      features: {
+        eyebrow: "Features",
+        title: "What's inside",
+        items: [
+          { title: "Maximum privacy",
+            text: "A message goes to the server, reaches the recipient and is deleted from the server after delivery." },
+          { title: "Everything stays on your device",
+            text: "Your chat history lives only on your device — you can delete it at any moment." },
+          { title: "Sign up without a phone number",
+            text: "No phone number and no extra data — just an account that belongs to you." },
+          { title: "Nothing to hand over",
+            text: "The server does not store your chats, so there is simply nothing to give on request." },
+          { title: "Modern look",
+            text: "Beautiful themes, tidy typography and smooth animations." }
+        ]
+      },
+      platforms: {
+        eyebrow: "Platforms",
+        title: "Where Tngram will live",
+        lead: "We plan to ship on all major platforms. No dates yet — we don't want to promise too much.",
+        tag: "Planned",
+        items: ["Android", "Windows 11", "Linux", "Web version"]
+      },
+      how: {
+        eyebrow: "How it works",
+        title: "Three steps — and nothing is left on the server",
+        lead: "A message lives on the server for a split second: just long enough to reach the recipient.",
+        steps: [
+          { title: "You send", text: "The message leaves your device and goes to the server. The copy stays with you only." },
+          { title: "The server passes it on", text: "The server finds the recipient and delivers the message." },
+          { title: "The server deletes it", text: "As soon as the message is delivered, it is deleted from the server. There is nothing to hand over." }
+        ],
+        compareTitle: "Where your chats live",
+        comparePlain: "A regular messenger",
+        compareTngram: "Tngram",
+        compare: [
+          { label: "Chats on the server", plain: "Stored", tngram: "Not stored" },
+          { label: "What can be handed over", plain: "The whole history", tngram: "Nothing" },
+          { label: "Deleting messages", plain: "Manually, a copy may remain", tngram: "Right after delivery" },
+          { label: "Phone number", plain: "Required", tngram: "Not needed" }
+        ]
+      },
+      mockup: {
+        eyebrow: "What it looks like",
+        title: "The message and the server",
+        lead: "Watch: a message appears in the chat, drops by the server for a moment — and disappears from it. In the chat it stays with you only.",
+        online: "private chat",
+        inputPlaceholder: "Message…",
+        serverTitle: "Tngram server",
+        serverEmpty: "No chats here",
+        statuses: ["Sending…", "Delivered to the recipient", "Deleted from the server"],
+        savedNote: "kept on your device only",
+        chat: [
+          { from: "them", text: "Hi! Is this Tngram?" },
+          { from: "me",   text: "Yes! Writing to you from my phone." }
+        ]
+      },
+      themes: {
+        eyebrow: "Themes",
+        title: "Pick your colour",
+        lead: "Click a theme — the site recolours. This is how the app will look too.",
+        note: "This is a demo: this is how different themes will look in the messenger.",
+        options: [
+          { id: "dark",  name: "Dark" },
+          { id: "green", name: "Green" },
+          { id: "blue",  name: "Blue" }
+        ]
+      },
+      nocollect: {
+        eyebrow: "Privacy",
+        title: "What we don't collect",
+        lead: "We don't keep what we don't need. If the data isn't there, it can't be lost or handed over.",
+        items: [
+          { title: "Phone number", text: "Sign-up without a phone number. There is no way to attach one to your account." },
+          { title: "Contacts from your address book", text: "We don't read your contact list and never upload it to the server." },
+          { title: "Chat history on the server", text: "Messages are deleted from the server right after delivery." }
+        ]
+      },
+      faq: {
+        eyebrow: "Questions",
+        title: "Frequently asked",
+        items: [
+          { q: "When will the messenger be released?",
+            a: "No date yet. Right now only message delivery is implemented. To hear first, subscribe to updates at the bottom of the page." },
+          { q: "What if the server goes down?",
+            a: "We want messages never to be lost: until a message is delivered, it stays on your device and will be sent once the server is available again." },
+          { q: "What happens when I change my phone?",
+            a: "Honestly: your chats are stored on the device only, so they won't move over by themselves. We are working on a careful way to transfer them — without copies ending up on the server." },
+          { q: "Can I recover my chats?",
+            a: "No. If you delete your chats or lose your device, there is no way to recover them — the server keeps no copy. That is the price of privacy." },
+          { q: "Do I need a phone number?",
+            a: "No. An account is created without a phone number and without your contact list." },
+          { q: "Can my chats be handed over on request?",
+            a: "The server does not store your chats, so there is nothing to hand over. What has already been delivered stays on the participants' devices only." }
+        ]
+      },
+      roadmap: {
+        eyebrow: "Status",
+        title: "Roadmap",
+        lead: "The messenger is still in development. There is no release date yet, and no announcements either.",
+        chips: { done: "Done", progress: "In progress", next: "Next" },
+        items: [
+          { status: "done",     title: "Message delivery", text: "A message is sent, delivered and deleted from the server." },
+          { status: "progress", title: "Stability and speed", text: "We are making delivery fast and reliable." },
+          { status: "next",     title: "Apps for Android and Windows", text: "Clients for phones and computers are planned." },
+          { status: "next",     title: "Group chats, photos and files", text: "Conversations with several people and attachments." },
+          { status: "next",     title: "Themes", text: "Several themes to choose from — as in the demo above." }
+        ],
+        rows: [
+          { label: "Already working", value: "Message delivery", accent: true },
+          { label: "Release date",    value: "Not known yet" },
+          { label: "Announcements",   value: "None yet" }
+        ]
+      },
+      subscribe: {
+        eyebrow: "Updates",
+        title: "Be the first to know",
+        lead: "Leave your email — we'll write once, when the messenger is ready.",
+        placeholder: "you@example.com",
+        button: "Subscribe",
+        note: "We use your email only for the launch news. No spam, no newsletters.",
+        success: "Done! We'll write to you when Tngram is out.",
+        error: "Please check your email address.",
+        mailtoSubject: "Tngram launch news",
+        mailtoBody: "Hello! I'd like to know when Tngram is released.\n\nMy email: ",
+        counter: "Already with us: %n",
+        followTitle: "Follow the project",
+        followText: "News will appear here. We'll add the links as soon as everything is ready.",
+        telegram: "Telegram channel",
+        github: "Source code",
+        linksHint: "No links added yet."
+      },
+      footer: { tagline: "Coming soon" }
+    }
+  };
+  /* Иконки карточек возможностей (порядок совпадает с features.items) */
+  const ICONS = [
+    /* щит с галочкой — приватность */
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5.6c0 4.3-2.9 8.2-7 9.4-4.1-1.2-7-5.1-7-9.4V6z"/><path d="m9 12 2 2 4-4"/></svg>',
+    /* телефон — хранение на устройстве */
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="3.2"/><path d="M10.6 18.6h2.8"/></svg>',
+    /* пользователь — без номера телефона */
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></svg>',
+    /* серверы — сервер не хранит переписку */
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="2.2"/><rect x="3" y="13" width="18" height="7" rx="2.2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>',
+    /* искры — современный визуал */
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3.5l1.7 4.8 4.8 1.7-4.8 1.7L11 16.5 9.3 11.7 4.5 10l4.8-1.7z"/><path d="M18.5 15l.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7z"/></svg>'
+  ];
+
+  /* Иконки платформ (по порядку platforms.items: Android, Windows, Linux, Web) */
+  const PLATFORM_ICONS = [
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3.4 10 6M15 3.4 14 6"/><rect x="6.5" y="6.5" width="11" height="10" rx="4.6"/><path d="M10 10.2h.01M14 10.2h.01"/></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.6"/><rect x="13" y="3" width="8" height="8" rx="1.6"/><rect x="3" y="13" width="8" height="8" rx="1.6"/><rect x="13" y="13" width="8" height="8" rx="1.6"/></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2c-2.2 0-3.4 1.8-3.4 4 0 1.7.3 2.9-.4 4.4C7.2 13.6 6 15.2 6 17c0 3 2.7 4.4 6 4.4s6-1.4 6-4.4c0-1.8-1.2-3.4-2.2-5.4-.7-1.5-.4-2.7-.4-4.4 0-2.2-1.2-4-3.4-4z"/><path d="M12 10.4l-.9 1.3h1.8z"/></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.4 2.5 3.7 5.6 3.7 9s-1.3 6.5-3.7 9c-2.4-2.5-3.7-5.6-3.7-9S9.6 5.5 12 3z"/></svg>'
+  ];
+
+  /* Иконки шагов (отправил → передал → удалил) и стрелка между ними */
+  const STEP_ICONS = [
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h15l-4-4M21 17H6l4 4"/></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5.6A1.6 1.6 0 0 1 10.6 4h2.8A1.6 1.6 0 0 1 15 5.6V7"/><path d="M6.6 7l1 12.1a2 2 0 0 0 2 1.9h4.8a2 2 0 0 0 2-1.9l1-12.1"/></svg>'
+  ];
+  const ARROW_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
+  const CROSS_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
+  /* ---------------------------------------------------------------- логика -- */
+
+  const $  = (sel) => document.querySelector(sel);
+  const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+  /* Достаём значение из объекта по пути вида "hero.slogan" */
+  const get = (obj, path) => path.split('.').reduce((acc, key) => (acc == null ? acc : acc[key]), obj);
+
+  let currentLang = 'ru';
+  /* Все текстовые элементы с data-i18n="путь.в.объекте" */
+  function applyStaticTexts(lang){
+    $$('[data-i18n]').forEach((el) => {
+      const value = get(TEXTS[lang], el.dataset.i18n);
+      if (typeof value === 'string') el.textContent = value;
+    });
+    $$('[data-i18n-placeholder]').forEach((el) => {
+      const value = get(TEXTS[lang], el.dataset.i18nPlaceholder);
+      if (typeof value === 'string') el.setAttribute('placeholder', value);
+    });
+  }
+
+  /* Возможности */
+  function renderCards(lang){
+    const items = TEXTS[lang].features.items;
+    $('#cards').innerHTML = items.map((item, i) => `
+      <article class="card reveal" style="--d:${i * 80}ms">
+        <div class="card-icon" aria-hidden="true">${ICONS[i] || ''}</div>
+        <h3>${item.title}</h3>
+        <p>${item.text}</p>
+      </article>`).join('');
+  }
+
+  /* Платформы */
+  function renderPlatforms(lang){
+    const p = TEXTS[lang].platforms;
+    $('#platform-list').innerHTML = p.items.map((name, i) => `
+      <div class="platform reveal" style="--d:${i * 70}ms">
+        ${PLATFORM_ICONS[i] || ''}
+        <div>
+          <span class="p-name">${name}</span>
+          <span class="p-tag">${p.tag}</span>
+        </div>
+      </div>`).join('');
+  }
+
+  /* Три шага */
+  function renderSteps(lang){
+    const steps = TEXTS[lang].how.steps;
+    $('#steps').innerHTML = steps.map((step, i) => `
+      <article class="step reveal" data-index="${i}" style="--d:${i * 90}ms">
+        <div class="step-num">${i + 1}</div>
+        <div class="card-icon" aria-hidden="true">${STEP_ICONS[i] || ''}</div>
+        <h3>${step.title}</h3>
+        <p>${step.text}</p>
+      </article>
+      ${i < steps.length - 1 ? `<div class="step-arrow" aria-hidden="true">${ARROW_ICON}</div>` : ''}`).join('');
+  }
+
+  /* Сравнение */
+  function renderCompare(lang){
+    const h = TEXTS[lang].how;
+    $('#compare').innerHTML = `
+      <div class="compare-head">
+        <span></span>
+        <span class="c-plain">${h.comparePlain}</span>
+        <span class="c-tngram">${h.compareTngram}</span>
+      </div>
+      ${h.compare.map((row) => `
+        <div class="compare-row">
+          <span class="c-label">${row.label}</span>
+          <span class="c-plain">${row.plain}</span>
+          <span class="c-tngram">${row.tngram}</span>
+        </div>`).join('')}`;
+  }
+
+  /* Чего мы не собираем */
+  function renderNoCollect(lang){
+    const items = TEXTS[lang].nocollect.items;
+    $('#nocollect').innerHTML = items.map((item, i) => `
+      <div class="nc-item reveal" style="--d:${i * 80}ms">
+        <div class="nc-icon" aria-hidden="true">${CROSS_ICON}</div>
+        <div>
+          <h3>${item.title}</h3>
+          <p>${item.text}</p>
+        </div>
+      </div>`).join('');
+  }
+
+  /* FAQ */
+  function renderFaq(lang){
+    const items = TEXTS[lang].faq.items;
+    $('#faq-list').innerHTML = items.map((item, i) => `
+      <details class="faq-item reveal" style="--d:${i * 50}ms">
+        <summary>${item.q}</summary>
+        <div class="faq-answer">${item.a}</div>
+      </details>`).join('');
+  }
+
+  /* Дорожная карта */
+  function renderTimeline(lang){
+    const r = TEXTS[lang].roadmap;
+    $('#timeline').innerHTML = r.items.map((item, i) => `
+      <div class="tl-item reveal" data-status="${item.status}" style="--d:${i * 70}ms">
+        <span class="status-chip" data-status="${item.status}">${r.chips[item.status] || ''}</span>
+        <h3>${item.title}</h3>
+        <p>${item.text}</p>
+      </div>`).join('');
+  }
+
+  /* Короткие строки статуса */
+  function renderStatusRows(lang){
+    $('#status-rows').innerHTML = TEXTS[lang].roadmap.rows.map((row) => `
+      <div class="row">
+        <span class="row-label">${row.label}</span>
+        <span class="row-value${row.accent ? ' accent' : ''}">${row.value}</span>
+      </div>`).join('');
+  }
+
+  /* Кнопки тем оформления */
+  function renderThemes(lang){
+    $('#theme-options').innerHTML = TEXTS[lang].themes.options.map((theme) => `
+      <button class="theme-btn" type="button" data-theme="${theme.id}" aria-pressed="false">
+        <span class="swatch t-${theme.id}" aria-hidden="true"></span>${theme.name}
+      </button>`).join('');
+  }
+  /* ===========================================================================
+     МОКАП: сообщение появляется в чате, ненадолго попадает на сервер и удаляется
+     =========================================================================== */
+  let demoTimers = [];
+  const clearDemo = () => { demoTimers.forEach(clearTimeout); demoTimers = []; };
+  const later = (ms, fn) => demoTimers.push(setTimeout(fn, ms));
+
+  function renderDemo(lang){
+    const m = TEXTS[lang].mockup;
+    $('#chat').innerHTML = m.chat.map((msg) => `
+      <div class="msg ${msg.from}">
+        <span class="txt">${msg.text}</span>
+        ${msg.from === 'me' ? `<span class="msg-note">${m.savedNote}</span>` : ''}
+      </div>`).join('');
+
+    /* Какое сообщение «отправим» на сервер — последнее исходящее */
+    const sent = m.chat.filter((x) => x.from === 'me').slice(-1)[0];
+    $('#server-msg .txt').textContent = sent ? sent.text : '';
+    $('#server-msg').classList.remove('show', 'deleted');
+    $('#server-status-text').textContent = '';
+  }
+
+  function runDemo(lang){
+    clearDemo();
+    const m = TEXTS[lang].mockup;
+    const bubbles = $$('#chat .msg');
+    const serverMsg = $('#server-msg');
+    const statusText = $('#server-status-text');
+
+    const reset = () => {
+      bubbles.forEach((b) => b.classList.remove('in', 'saved'));
+      serverMsg.classList.remove('show', 'deleted');
+      statusText.textContent = '';
+    };
+
+    /* Если включён режим «меньше движения» — показываем финальный кадр без цикла */
+    if (reduceMotion){
+      bubbles.forEach((b) => b.classList.add('in'));
+      serverMsg.classList.add('show', 'deleted');
+      statusText.textContent = m.statuses[2];
+      return;
+    }
+
+    reset();
+    later(500,  () => { if (bubbles[0]) bubbles[0].classList.add('in'); });     // приходит сообщение
+    later(1300, () => { if (bubbles[1]) bubbles[1].classList.add('in'); });     // отвечаем
+    later(2200, () => { serverMsg.classList.add('show'); statusText.textContent = m.statuses[0]; }); // на сервере
+    later(3800, () => { statusText.textContent = m.statuses[1]; });             // передано
+    later(5200, () => { serverMsg.classList.add('deleted'); statusText.textContent = m.statuses[2]; }); // удалено
+    later(6000, () => { if (bubbles[1]) bubbles[1].classList.add('saved'); });   // осталось только у тебя
+    later(8800, reset);                                                        // сброс
+    later(9200, () => runDemo(lang));                                          // и снова по кругу
+  }
+  /* ===========================================================================
+     ТЕМЫ ОФОРМЛЕНИЯ
+     =========================================================================== */
+  const THEME_KEY = 'tngram-theme';
+
+  function setTheme(id){
+    document.documentElement.dataset.theme = id;
+    $$('#theme-options .theme-btn').forEach((btn) => {
+      btn.setAttribute('aria-pressed', String(btn.dataset.theme === id));
+    });
+    try { localStorage.setItem(THEME_KEY, id); } catch (e) {}
+  }
+
+  /* Клик по теме */
+  $('#theme-options').addEventListener('click', (event) => {
+    const btn = event.target.closest('button[data-theme]');
+    if (btn) setTheme(btn.dataset.theme);
+  });
+
+  /* ===========================================================================
+     ПОЯВЛЕНИЕ ПРИ СКРОЛЛЕ + ПОДСВЕТКА ШАГОВ ПО ОЧЕРЕДИ
+     =========================================================================== */
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const observer = ('IntersectionObserver' in window && !reduceMotion)
+    ? new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting){
+            entry.target.classList.add('in');
+            observer.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' })
+    : null;
+
+  function observeReveals(){
+    if (!observer){
+      $$('.reveal').forEach((el) => el.classList.add('in'));
+      return;
+    }
+    $$('.reveal:not(.in)').forEach((el) => observer.observe(el));
+  }
+
+  /* Шаг «загорается» по мере прокрутки секции: 1 → 2 → 3 */
+  function updateSteps(){
+    const steps = $$('#steps .step');
+    if (!steps.length) return;
+    const box = $('#steps').getBoundingClientRect();
+    const start = window.innerHeight * 0.85;          /* когда секция входит снизу */
+    const total = box.height + window.innerHeight * 0.45;
+    const progress = Math.min(1, Math.max(0, (start - box.top) / total));
+    let active = Math.min(steps.length - 1, Math.floor(progress * steps.length));
+    if (progress <= 0) active = 0;
+    steps.forEach((step, i) => step.classList.toggle('active', i <= active));
+  }
+
+  /* Не чаще одного кадра в секунду-кадра: считаем по requestAnimationFrame */
+  let scrollQueued = false;
+  function onScroll(){
+    if (scrollQueued) return;
+    scrollQueued = true;
+    requestAnimationFrame(() => { scrollQueued = false; updateSteps(); updateFab(); });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
+  /* ===========================================================================
+     ЯЗЫК
+     =========================================================================== */
+  function renderAll(lang){
+    applyStaticTexts(lang);
+    renderCards(lang);
+    renderPlatforms(lang);
+    renderSteps(lang);
+    renderCompare(lang);
+    renderNoCollect(lang);
+    renderFaq(lang);
+    renderTimeline(lang);
+    renderStatusRows(lang);
+    renderThemes(lang);
+    renderDemo(lang);
+    runDemo(lang);
+    observeReveals();
+    updateSteps();
+    setTheme(document.documentElement.dataset.theme || 'dark');
+  }
+
+  function setLang(lang){
+    currentLang = TEXTS[lang] ? lang : 'ru';
+    const t = TEXTS[currentLang];
+
+    document.documentElement.lang = currentLang;
+    document.title = t.meta.title;
+    const setMeta = (sel, value) => { const el = $(sel); if (el) el.setAttribute('content', value); };
+    setMeta('#og-title', t.meta.title);
+    setMeta('#og-desc', t.meta.description);
+    setMeta('meta[name="description"]', t.meta.description);
+
+    $$('#lang-switch button').forEach((btn) => {
+      btn.setAttribute('aria-pressed', String(btn.dataset.lang === currentLang));
+    });
+
+    renderAll(currentLang);
+    try { localStorage.setItem('tngram-lang', currentLang); } catch (e) {}
+  }
+
+  $('#lang-switch').addEventListener('click', (event) => {
+    const btn = event.target.closest('button[data-lang]');
+    if (btn) setLang(btn.dataset.lang);
+  });
+
+  /* ===========================================================================
+     ПОДПИСКА
+     =========================================================================== */
+  function submitSubscribe(event){
+    event.preventDefault();
+    const s = TEXTS[currentLang].subscribe;
+    const input = $('#email');
+    const status = $('#form-status');
+    const value = (input.value || '').trim();
+    const valid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value);
+
+    if (!valid){
+      status.textContent = s.error;
+      status.className = 'form-status err';
+      return;
+    }
+
+    /* Если подключён сервис форм — отправляем туда */
+    if (CONFIG.subscribeEndpoint){
+      status.textContent = '…';
+      status.className = 'form-status';
+      fetch(CONFIG.subscribeEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ email: value })
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error('bad');
+          status.textContent = s.success;
+          status.className = 'form-status ok';
+          input.value = '';
+        })
+        .catch(() => {
+          status.textContent = s.error;
+          status.className = 'form-status err';
+        });
+      return;
+    }
+
+    /* Пока сервиса нет — открываем почтовый клиент с готовым письмом */
+    const subject = encodeURIComponent(s.mailtoSubject);
+    const body = encodeURIComponent(s.mailtoBody + value);
+    window.location.href = 'mailto:' + CONFIG.contactEmail + '?subject=' + subject + '&body=' + body;
+    status.textContent = s.success;
+    status.className = 'form-status ok';
+  }
+  $('#subscribe-form').addEventListener('submit', submitSubscribe);
+
+  /* Счётчик «Нас уже N» — только если число задано в CONFIG */
+  function renderCounter(){
+    const box = $('#counter');
+    if (typeof CONFIG.subscribersCount === 'number'){
+      box.textContent = TEXTS[currentLang].subscribe.counter.replace('%n', CONFIG.subscribersCount);
+      box.hidden = false;
+    } else {
+      box.hidden = true;
+    }
+  }
+
+  /* Ссылки на Telegram / GitHub: пустая ссылка = кнопка скрыта */
+  function applyLinks(){
+    const pairs = [
+      ['#link-telegram', '#foot-telegram', CONFIG.links.telegram],
+      ['#link-github',   '#foot-github',   CONFIG.links.github]
+    ];
+    let visible = 0;
+    pairs.forEach(([mainSel, footSel, url]) => {
+      [mainSel, footSel].forEach((sel) => {
+        const el = $(sel);
+        if (!el) return;
+        if (url){ el.setAttribute('href', url); el.hidden = false; } else { el.hidden = true; }
+      });
+      if (url) visible++;
+    });
+    $('#links-hint').hidden = visible > 0;
+  }
+
+  /* ===========================================================================
+     МЕЛОЧИ: плавающая кнопка, год, своя иконка, свечение под курсором
+     =========================================================================== */
+  function updateFab(){
+    $('#fab').classList.toggle('show', window.scrollY > 600);
+  }
+
+  $('#year').textContent = new Date().getFullYear();
+
+  /* Мягкое свечение под курсором на карточках */
+  document.addEventListener('pointermove', (event) => {
+    const card = event.target.closest && event.target.closest('.card');
+    if (!card) return;
+    const r = card.getBoundingClientRect();
+    card.style.setProperty('--mx', ((event.clientX - r.left) / r.width) * 100 + '%');
+    card.style.setProperty('--my', ((event.clientY - r.top) / r.height) * 100 + '%');
+  });
+
+  /* ------------------------------------------------------------------ старт -- */
+  (function init(){
+    /* Язык: сохранённый или русский по умолчанию */
+    let startLang = 'ru';
+    let startTheme = 'dark';
+    try {
+      const lang = localStorage.getItem('tngram-lang');
+      if (lang === 'ru' || lang === 'en') startLang = lang;
+      const theme = localStorage.getItem(THEME_KEY);
+      if (theme) startTheme = theme;
+    } catch (e) {}
+
+    document.documentElement.dataset.theme = startTheme;
+    applyLinks();
+    setLang(startLang);
+    renderCounter();
+    updateFab();
+  })();
+
+  </script>
+</body>
+</html>
