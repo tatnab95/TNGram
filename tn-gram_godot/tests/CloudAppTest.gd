@@ -78,10 +78,10 @@ func _ready() -> void:
 	check("свой ник создан", bool(Store.create_account(my_nick, "").get("ok")))
 	check("вошли под своим ником", bool(Store.login(my_nick, "").get("ok")), Store.current_nick)
 
-	Store.set_relay(url, 7777, true, key)
-	check("приложение настроено на облако",
+	# Ничего не настраиваем: приложение обязано само ходить в облако по умолчанию.
+	check("приложение по умолчанию настроено на облако",
 		Store.relay_host() == url and Store.relay_key() == key and Store.relay_auto(),
-		Store.relay_host())
+		Store.relay_host() + " / ключ " + str(Store.relay_key().length()))
 
 	# ---------------------------------------------------------- второе «устройство»
 	var peer_inbox: Array = []

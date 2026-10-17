@@ -47,13 +47,20 @@ if defined TAILSCALE_IP (
 echo.
 echo   TNGram - relay server and app
 echo   ===============================================================
+echo   The app connects to the CLOUD by itself. Nothing to set up:
+echo   just run run.bat on every computer and sign in.
+echo   ---------------------------------------------------------------
+echo   This window ALSO starts a home-network server. It is needed
+echo   only if you want to chat WITHOUT the internet:
+echo     - run it on ONE computer only;
 if defined SHOW_IP (
-    echo   Friends connect to:  ws://!SHOW_IP!:7777   - !IP_KIND!
+    echo     - on the other computer type  ws://!SHOW_IP!:7777
+    echo       in Settings - Connection ^(this computer, !IP_KIND!^).
 ) else (
-    echo   Could not detect this computer address. Find it by hand:
-    echo   open a console, run  ipconfig  and take the IPv4 address.
+    echo     - on the other computer type this computer address:7777
+    echo       ^(find it by running ipconfig^).
 )
-echo   On this computer:    ws://127.0.0.1:7777
+echo     - on this computer use  ws://127.0.0.1:7777
 echo   ===============================================================
 
 rem --- файрвол: правило для входящего порта 7777 ---

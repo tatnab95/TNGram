@@ -4,6 +4,7 @@ extends Node
 ## Проверяет данные, вход, переписку, переключение языка/темы и сборку экранов.
 
 const TnNetScript := preload("res://scripts/net/TnNet.gd")
+const Protocol := preload("res://scripts/net/Protocol.gd")
 
 var failures := 0
 var passes := 0
@@ -115,6 +116,12 @@ func _ready() -> void:
 	check("переписка с гостем убрана", Store.messages("гость").is_empty())
 
 	# ---------------------------------------------------------- 5в. Настройки связи
+	# Пока адрес не задан, приложение само настраивается на облако
+	check("по умолчанию приложение настраивается на облако",
+		Store.relay_host() == Protocol.CLOUD_DEFAULT_URL, Store.relay_host())
+	check("и уже знает публичный ключ проекта",
+		Store.relay_key() == Protocol.CLOUD_DEFAULT_KEY, Store.relay_key())
+	check("по умолчанию подключение при входе включено", Store.relay_auto())
 	Store.set_relay("192.168.1.5", 8123, true)
 	check("адрес сервера запоминается", Store.relay_host() == "192.168.1.5", Store.relay_host())
 	check("порт сервера запоминается", Store.relay_port() == 8123, str(Store.relay_port()))

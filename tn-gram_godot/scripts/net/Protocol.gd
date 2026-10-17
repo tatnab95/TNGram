@@ -19,6 +19,12 @@ const CLOUD_REALTIME_PATH := "/realtime/v1/websocket"
 const CLOUD_VSN := "1.0.0"
 const CLOUD_TOPIC := "realtime:public:messages"
 
+## Готовый облачный проект «Тнграм». Если ничего не настраивать, приложение
+## подключается сюда — и работает из любой точки интернета, без своего сервера.
+## Свой сервер (домашняя сеть) включается в «Настройки → Связь» или через start.bat.
+const CLOUD_DEFAULT_URL := "https://hqmgjnloilemdwejzoyy.supabase.co"
+const CLOUD_DEFAULT_KEY := "sb_publishable_eyJSH1Zs1IDEeE61009XDw_cQt5ujXj"
+
 ## Адрес похож на облачный? (http/https или что-то.supabase.co)
 static func is_cloud(url: String) -> bool:
 	var u := url.strip_edges().to_lower()

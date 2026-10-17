@@ -207,15 +207,18 @@ func set_theme(value: String) -> void:
 
 ## ------------------------------------------------------------------ связь
 
+## Адрес по умолчанию — облако: тогда на любом компьютере всё работает сразу,
+## ничего не надо вписывать. Свой сервер (домашняя сеть) ставится вручную в
+## «Настройки → Связь» — например, 192.168.1.102:7777.
 func relay_host() -> String:
-	return String(settings.get("relay_host", P.DEFAULT_HOST))
+	return String(settings.get("relay_host", P.CLOUD_DEFAULT_URL))
 
 func relay_port() -> int:
 	return int(settings.get("relay_port", P.DEFAULT_PORT))
 
 ## Публичный ключ облачного проекта (Supabase). Не секрет: его можно показывать.
 func relay_key() -> String:
-	return String(settings.get("relay_key", ""))
+	return String(settings.get("relay_key", P.CLOUD_DEFAULT_KEY))
 
 ## Галочка «подключаться при входе». По умолчанию включена: иначе входящий на связь
 ## пользователь просто набирает текст, и сообщение уходит только на своё устройство.
