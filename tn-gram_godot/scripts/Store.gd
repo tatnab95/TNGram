@@ -213,15 +213,20 @@ func relay_host() -> String:
 func relay_port() -> int:
 	return int(settings.get("relay_port", P.DEFAULT_PORT))
 
+## Публичный ключ облачного проекта (Supabase). Не секрет: его можно показывать.
+func relay_key() -> String:
+	return String(settings.get("relay_key", ""))
+
 ## Галочка «подключаться при входе». По умолчанию включена: иначе входящий на связь
 ## пользователь просто набирает текст, и сообщение уходит только на своё устройство.
 func relay_auto() -> bool:
 	return bool(settings.get("relay_auto", true))
 
-func set_relay(host: String, port: int, auto: bool) -> void:
+func set_relay(host: String, port: int, auto: bool, key: String = "") -> void:
 	settings["relay_host"] = host.strip_edges()
 	settings["relay_port"] = int(port)
 	settings["relay_auto"] = bool(auto)
+	settings["relay_key"] = key.strip_edges()
 	save_data()
 
 ## ------------------------------------------------------------------ файл данных

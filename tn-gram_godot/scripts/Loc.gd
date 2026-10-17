@@ -66,12 +66,13 @@ const STRINGS := {
 		"settings_delete_account": "Удалить аккаунт",
 		"settings_delete_confirm": "Удалить аккаунт %s и всю его переписку?",
 		"settings_about": "О приложении",
-		"settings_about_text": "Тнграм ещё в разработке. Сообщение уходит на сервер-передаточник, доходит до получателя и удаляется с сервера.",
-		"settings_soon_server": "Сейчас работает связь внутри одной сети. Облако и передача между разными сетями — следующий шаг.",
+		"settings_about_text": "Тнграм ещё в разработке. Сообщение уходит на сервер (свой или облачный), доходит до получателя и удаляется с сервера.",
+		"settings_soon_server": "Свой сервер работает внутри одной сети. Для связи из любой точки впиши адрес облака и ключ проекта.",
 
 		# --- связь ---
 		"net": "Связь",
-		"net_host_hint": "адрес:порт, например 127.0.0.1:7777",
+		"net_host_hint": "127.0.0.1:7777 или https://проект.supabase.co",
+		"net_key_hint": "ключ проекта: sb_publishable_…",
 		"net_auto": "Подключаться при входе",
 		"net_connect": "Подключиться",
 		"net_disconnect": "Отключиться",
@@ -84,7 +85,7 @@ const STRINGS := {
 		"net_server_error": "Сервер: %s",
 		"net_note_online": "Связь есть: сообщение уйдёт на сервер, дойдёт до получателя и удалится с сервера.",
 		"net_note_offline": "Связи нет: сообщение пока сохранится только у тебя на устройстве.",
-		"net_bad_address": "Не понял адрес. Пиши так: 127.0.0.1:7777",
+		"net_bad_address": "Не понял адрес. Нужно «127.0.0.1:7777» или «https://проект.supabase.co»",
 
 		# --- ошибки ---
 		"err_nick_short": "Ник слишком короткий: нужно хотя бы 2 символа.",
@@ -157,12 +158,13 @@ const STRINGS := {
 		"settings_delete_account": "Delete account",
 		"settings_delete_confirm": "Delete account %s and all its chats?",
 		"settings_about": "About",
-		"settings_about_text": "Tngram is still in development. A message goes to the relay server, reaches the recipient and is deleted from the server.",
-		"settings_soon_server": "For now delivery works inside one network. The cloud and cross-network delivery come next.",
+		"settings_about_text": "Tngram is still in development. A message goes to the server (yours or the cloud), reaches the recipient and is deleted from the server.",
+		"settings_soon_server": "Your own server works inside one network. For delivery anywhere, enter the cloud address and the project key.",
 
 		# --- связь ---
 		"net": "Connection",
-		"net_host_hint": "host:port, for example 127.0.0.1:7777",
+		"net_host_hint": "127.0.0.1:7777 or https://project.supabase.co",
+		"net_key_hint": "project key: sb_publishable_…",
 		"net_auto": "Connect on sign-in",
 		"net_connect": "Connect",
 		"net_disconnect": "Disconnect",
@@ -175,7 +177,7 @@ const STRINGS := {
 		"net_server_error": "Server: %s",
 		"net_note_online": "Connected: the message goes to the server, reaches the recipient and is deleted from the server.",
 		"net_note_offline": "No connection: the message is stored on your device only.",
-		"net_bad_address": "Cannot read the address. Use this form: 127.0.0.1:7777",
+		"net_bad_address": "Cannot read the address. Use \"127.0.0.1:7777\" or \"https://project.supabase.co\"",
 
 		# --- ошибки ---
 		"err_nick_short": "Nickname is too short: at least 2 characters.",

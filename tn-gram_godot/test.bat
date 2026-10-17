@@ -1,9 +1,9 @@
 @echo off
 rem ---------------------------------------------------------------------------
 rem  Автопроверки TNGram, окно не нужно.
-rem  1) интерфейс и данные (102 проверки), 2) связь (21 проверка).
-rem  Внимание: проверка сбрасывает данные приложения и в конце оставляет
-rem  чистый старт (только админ и админ2, без паролей и переписки).
+rem  1) интерфейс и данные (114 проверок), 2) связь в своей сети (21 проверка).
+rem  Проверки идут в отдельном профиле (tngram_data_smoke.json), поэтому твои
+rem  аккаунты и переписка не трогаются.
 rem ---------------------------------------------------------------------------
 
 set "GODOT_EXE=C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe"
@@ -18,6 +18,9 @@ if not exist "%GODOT_EXE%" (
     set "GODOT_EXE=godot"
 )
 
+rem Отдельный профиль: проверка не касается настоящих данных приложения
+set "TNGRAM_PROFILE=smoke"
+
 echo === Интерфейс и данные ===
 "%GODOT_EXE%" --headless --path "%~dp0." res://tests/SmokeTest.tscn
 set "SMOKE_OK=%ERRORLEVEL%"
@@ -26,6 +29,9 @@ echo.
 echo === Связь: сервер и два клиента ===
 "%GODOT_EXE%" --headless --path "%~dp0." res://tests/NetTest.tscn
 set "NET_OK=%ERRORLEVEL%"
+
+rem Убираем временный профиль проверки
+del "%APPDATA%\Godot\app_userdata\TNGram\tngram_data_smoke.json" >nul 2>nul
 
 echo.
 echo Report files:

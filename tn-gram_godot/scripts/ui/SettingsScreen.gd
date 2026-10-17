@@ -4,6 +4,7 @@ extends ScreenBase
 const P := preload("res://scripts/net/Protocol.gd")
 
 var address_field: LineEdit
+var key_field: LineEdit
 var connect_button: Button
 var auto_check: CheckButton
 var status_label: Label
@@ -98,7 +99,8 @@ func net_block() -> PanelContainer:
 
 	var address_row := hbox(10)
 	address_field = LineEdit.new()
-	address_field.text = "%s:%d" % [Store.relay_host(), Store.relay_port()]
+	address_field.text = Store.relay_host() if P.is_cloud(Store.relay_host()) \
+		else "%s:%d" % [Store.relay_host(), Store.relay_port()]
 	address_field.placeholder_text = Loc.t("net_host_hint")
 	address_field.custom_minimum_size = Vector2(0, 42)
 	address_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -106,6 +108,15 @@ func net_block() -> PanelContainer:
 	connect_button = accent_button(connect_text(), func() -> void: _toggle_connection())
 	address_row.add_child(connect_button)
 	box.add_child(address_row)
+
+	# Ключ облачного проекта. Нужен только для облака, но пусть будет всегда —
+	# так меньше путаницы: вставил адрес и ключ, нажал «Подключиться».
+	key_field = LineEdit.new()
+	key_field.text = Store.relay_key()
+	key_field.placeholder_text = Loc.t("net_key_hint")
+	key_field.custom_minimum_size = Vector2(0, 42)
+	key_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(key_field)
 
 	var auto_row := hbox(8)
 	auto_check = CheckButton.new()
@@ -155,25 +166,40 @@ func _toggle_connection() -> void:
 		status_label.text = Loc.t("net_bad_address")
 		status_label.add_theme_color_override("font_color", Color("#ff8f8f"))
 		return
-	Store.set_relay(String(address["host"]), int(address["port"]), Store.relay_auto())
-	Net.connect_to(String(address["host"]), int(address["port"]), Store.current_nick)
+	Store.set_relay(String(address["host"]), int(address["port"]), Store.relay_auto(), _key_from_field())
+	Net.connect_to(String(address["host"]), int(address["port"]), Store.current_nick, _key_from_field())
 	apply_net_state()
 
 ## Запомнить галочку «подключаться при входе»
 func _save_relay(auto: bool) -> void:
 	var address := _address_from_field()
 	if bool(address["ok"]):
-		Store.set_relay(String(address["host"]), int(address["port"]), auto)
+		Store.set_relay(String(address["host"]), int(address["port"]), auto, _key_from_field())
 	else:
-		Store.set_relay(Store.relay_host(), Store.relay_port(), auto)
+		Store.set_relay(Store.relay_host(), Store.relay_port(), auto, _key_from_field())
 	if auto:
 		app().maybe_connect()
 
-## Разобрать «адрес:порт» из поля
+func _key_from_field() -> String:
+	return key_field.text.strip_edges() if key_field != null else ""
+
+## Разобрать адрес из поля: «адрес:порт» для своего сервера или
+## «https://проект.supabase.co» для облака.
 func _address_from_field() -> Dictionary:
 	var raw := address_field.text.strip_edges()
 	if raw == "":
 		return { "ok": false }
+	# Адрес облака: приводим привычные «ws://»/«wss://» к «https://»
+	if P.is_cloud(raw):
+		var url := raw
+		if url.to_lower().begins_with("wss://"):
+			url = "https://" + url.substr(6)
+		elif url.to_lower().begins_with("ws://"):
+			url = "http://" + url.substr(5)
+		url = url.trim_suffix("/").strip_edges()
+		if url == "":
+			return { "ok": false }
+		return { "ok": true, "host": url, "port": P.DEFAULT_PORT, "cloud": true }
 	# start.bat печатает адрес с префиксом ws:// — принимаем и его, и голый «адрес:порт»
 	for scheme in ["ws://", "wss://", "tcp://"]:
 		if raw.to_lower().begins_with(scheme):

@@ -81,7 +81,7 @@ func maybe_connect() -> void:
 		return
 	if Net.is_online() and Net.nick == Store.current_nick:
 		return
-	Net.connect_to(Store.relay_host(), Store.relay_port(), Store.current_nick)
+	Net.connect_to(Store.relay_host(), Store.relay_port(), Store.current_nick, Store.relay_key())
 
 ## ---------------------------------------------------------------- фон
 

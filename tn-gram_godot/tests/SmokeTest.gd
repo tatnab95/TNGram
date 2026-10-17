@@ -124,6 +124,12 @@ func _ready() -> void:
 	check("адрес сервера уцелел после перезапуска", Store.relay_host() == "192.168.1.5", Store.relay_host())
 	check("порт сервера уцелел после перезапуска", Store.relay_port() == 8123, str(Store.relay_port()))
 	check("галочка «подключаться при входе» уцелела после перезапуска", Store.relay_auto())
+	# Облако: адрес-ссылка и публичный ключ проекта
+	Store.set_relay("https://probe.supabase.co", 7777, true, "sb_publishable_probe")
+	check("облачный адрес запоминается", Store.relay_host() == "https://probe.supabase.co", Store.relay_host())
+	check("ключ проекта запоминается", Store.relay_key() == "sb_publishable_probe", Store.relay_key())
+	Store.load_data()
+	check("ключ проекта уцелел после перезапуска", Store.relay_key() == "sb_publishable_probe", Store.relay_key())
 	Store.set_relay("127.0.0.1", 7777, false)
 	check("настройки связи возвращаются к обычным",
 		Store.relay_host() == "127.0.0.1" and Store.relay_port() == 7777 and not Store.relay_auto())
@@ -214,6 +220,12 @@ func _ready() -> void:
 		check("адрес с префиксом ws:// принимается",
 			bool(parsed.get("ok")) and String(parsed.get("host")) == "192.168.1.5" and int(parsed.get("port")) == 8123,
 			str(parsed))
+		# Облачный адрес — ссылка на проект; порт у него не указывают
+		address_field.text = "https://probe.supabase.co"
+		var cloud_parsed: Dictionary = main.screen.call("_address_from_field")
+		check("облачный адрес принимается",
+			bool(cloud_parsed.get("ok")) and String(cloud_parsed.get("host")) == "https://probe.supabase.co",
+			str(cloud_parsed))
 		address_field.text = "127.0.0.1:7777"
 	Net.stop()
 	# Отправка «мимо сети»: связи нет, но сообщение обязано остаться у нас
