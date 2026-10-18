@@ -168,6 +168,12 @@ func _ready() -> void:
 	await get_tree().process_frame
 	check("экран создания ника открывается", main.current_id == "new")
 	check("на нём три поля ввода", count_nodes(main.screen, "LineEdit") == 3, str(count_nodes(main.screen, "LineEdit")))
+	# Пароль короче шести знаков облако считает слабым — предупреждаем сразу
+	main.screen.call("_submit", "короткий", "123", "123")
+	await get_tree().process_frame
+	check("короткий пароль не пропускается",
+		String(main.screen.get("error_code")) == "err_pass_short", String(main.screen.get("error_code")))
+	check("видно объяснение про короткий пароль", find_label(main.screen, Loc.t("err_pass_short")) != null)
 
 	main.show_screen("chat", "админ2")
 	await get_tree().process_frame
@@ -175,6 +181,22 @@ func _ready() -> void:
 	check("экран чата открывается", main.current_id == "chat")
 	check("в чате одно поле ввода", count_nodes(main.screen, "LineEdit") == 1)
 	check("сообщение видно в чате", find_label(main.screen, "привет") != null)
+
+	# Недописанный текст не должен пропадать, когда приходит новое сообщение
+	var chat_input: Node = find_by(main.screen, func(n: Node) -> bool: return n is LineEdit)
+	(chat_input as LineEdit).text = "недописанное"
+	Store.receive_message("админ2", "ответ друга", 0, "draft-1")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var same_input: Node = find_by(main.screen, func(n: Node) -> bool: return n is LineEdit)
+	check("после нового сообщения набранный текст сохраняется",
+		same_input != null and String((same_input as LineEdit).text) == "недописанное",
+		String((same_input as LineEdit).text) if same_input != null else "нет поля")
+	check("новое сообщение появилось в чате", find_label(main.screen, "ответ друга") != null)
+	(same_input as LineEdit).text = ""
+	# Возвращаем переписку к тому виду, на который рассчитывают проверки ниже
+	Store.delete_history("админ2")
+	Store.send_message("админ2", "привет")
 
 	main.show_screen("settings", null)
 	await get_tree().process_frame
@@ -191,6 +213,12 @@ func _ready() -> void:
 		String(connect_button.text) if connect_button != null else "")
 	check("в настройках видно состояние связи", status_label != null and String(status_label.text) == Loc.t("net_off"),
 		String(status_label.text) if status_label != null else "")
+	# Уведомления Windows — отдельный переключатель (только на Windows)
+	if OS.has_feature("windows"):
+		var os_toggle: Node = find_by(main.screen, func(n: Node) -> bool:
+			return n is CheckButton and n.name == "NotifyOs")
+		check("в настройках есть переключатель уведомлений Windows",
+			os_toggle != null and (os_toggle as CheckButton).button_pressed == Store.notify_os())
 	# Раскладка нового блока: поле адреса должно быть видимым и растянутым
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -492,7 +520,330 @@ func _ready() -> void:
 	Store.delete_account("тест2")
 	check("аккаунт с паролем удалён", not Store.account_exists("тест2"))
 
-	# ---------------------------------------------------------- 15. Итог и уборка
+	# ---------------------------------------------------------- 16. Ники: один ник на всех
+	Store.login("админ", "")
+	Store.unread = {}
+	check("ключ ника не зависит от регистра",
+		Protocol.nick_key("Админ") == Protocol.nick_key("админ") and Protocol.nick_key(" админ ") == "админ")
+	var before_peers := Store.messages("админ2").size()
+	Store.send_message("АДМИН2", "регистр")
+	check("регистр в нике не создаёт второй чат",
+		Store.messages("админ2").size() == before_peers + 1 and not Store.contacts().has("АДМИН2"),
+		str(Store.contacts()))
+	check("список собеседников не задваивает ник",
+		Store.contacts().count("админ2") == 1, str(Store.contacts()))
+	Store.delete_history("АДМИН2")
+
+	# Непрочитанные
+	Store.receive_message("админ2", "первое", 0, "n-1")
+	Store.receive_message("админ2", "второе", 0, "n-2")
+	Store.receive_message("гость", "третье", 0, "n-3")
+	check("непрочитанные считаются по чату", Store.unread_count("админ2") == 2, str(Store.unread_count("админ2")))
+	check("непрочитанные считаются всего", Store.unread_total() == 3, str(Store.unread_total()))
+	Store.mark_read("админ2")
+	check("снятие значка обнуляет только один чат",
+		Store.unread_count("админ2") == 0 and Store.unread_total() == 1,
+		str(Store.unread_count("админ2")) + "/" + str(Store.unread_total()))
+	Store.receive_message("админ2", "непрочитанное", 0, "n-9")
+	check("перед открытием чата значок есть", Store.unread_count("админ2") == 1, str(Store.unread_count("админ2")))
+	main.show_screen("chat", "админ2")
+	await get_tree().process_frame
+	check("открытие чата в интерфейсе снимает значок", Store.unread_count("админ2") == 0, str(Store.unread_count("админ2")))
+	Store.delete_history("админ2")
+	Store.delete_history("гость")
+
+	# Собеседник с моим же ником: ник занят дважды — сообщения не должны пропадать
+	check("чат с одноимённым собеседником не прячется",
+		Store.receive_message("админ", "это не я", 0, "self-1") and Store.contacts().has("админ"),
+		str(Store.contacts()))
+	check("поднято предупреждение о чужом нике", Store.nick_conflict)
+	check("непрочитанное от одноимённого считается", Store.unread_count("админ") == 1, str(Store.unread_count("админ")))
+	Store.mark_read("админ")
+	Store.delete_history("админ")
+	Store.nick_conflict = false
+
+	# Новый чат с любым ником
+	check("чат с новым человеком заводится", Store.ensure_contact("новичок"))
+	check("новый человек виден в списке", Store.contacts().has("новичок"), str(Store.contacts()))
+	check("чат с самим собой не заводится", not Store.ensure_contact("АДМИН"))
+	Store.delete_history("новичок")
+
+	# Проверка ника и пароля без создания аккаунта
+	check("слишком короткий ник — ошибка", Store.nick_error("a") == "err_nick_short")
+	check("занятый ник — ошибка", Store.nick_error("АДМИН") == "err_nick_used")
+	check("свободный ник — без ошибки", Store.nick_error("свободный_ник") == "")
+	check("хеш пароля считается", Store.hash_password("1234") != "" and Store.hash_password("") == "")
+
+	# Экран «Новый чат»
+	main.show_screen("newchat", null)
+	await get_tree().process_frame
+	check("экран нового чата открывается", main.current_id == "newchat", main.current_id)
+	check("на экране нового чата одно поле",
+		count_nodes(main.screen, "LineEdit") == 1, str(count_nodes(main.screen, "LineEdit")))
+	check("есть кнопка «Открыть чат»", find_by(main.screen, func(n: Node) -> bool:
+		return n is Button and n.text == Loc.t("newchat_open")) != null)
+
+	# ---------------------------------------------------------- 17. Сглаживание, звук, уведомления, обновления
+
+	# Сравнение версий: по числам, а не как строки (1.10 новее 1.9)
+	check("версия 1.10 новее, чем 1.9", Protocol.version_compare("1.10", "1.9") == 1)
+	check("одинаковые версии равны", Protocol.version_compare("1.2", "1.2") == 0)
+	check("старая версия определяется", Protocol.version_compare("1.1", "1.2") == -1)
+	check("пустая версия считается старой", Protocol.version_compare("", "1.2") == -1)
+
+	# Что нового
+	var changelog: Array = Protocol.changelog("ru")
+	check("история версий есть", changelog.size() >= 2, str(changelog.size()))
+	var has_current := false
+	for entry in changelog:
+		if String(entry.get("version", "")) == Protocol.APP_VERSION:
+			has_current = true
+	check("в истории есть текущая версия", has_current, Protocol.APP_VERSION)
+	check("у записи есть пункты", not (changelog[0].get("items", []) as Array).is_empty())
+	check("история переводится на английский",
+		String((Protocol.changelog("en")[0].get("items", []) as Array)[0]) != String((changelog[0].get("items", []) as Array)[0]))
+
+	# Сглаживание
+	Store.set_aa(999)
+	check("уровень сглаживания не выходит за границы", Store.aa_level() == 3, str(Store.aa_level()))
+	Store.set_aa(2)
+	check("уровень сглаживания запоминается", Store.aa_level() == 2, str(Store.aa_level()))
+	check("текстура свечения растёт вместе со сглаживанием", UiStyle.glow_size(0) < UiStyle.glow_size(3),
+		"%d < %d" % [UiStyle.glow_size(0), UiStyle.glow_size(3)])
+	var plain_font: Font = UiStyle.aa_font(0)
+	var soft_font: Font = UiStyle.aa_font(2)
+	check("шрифт без сглаживания получился",
+		plain_font is FontFile and (plain_font as FontFile).antialiasing == TextServer.FONT_ANTIALIASING_NONE)
+	check("у мягкого шрифта сглаживание включено",
+		soft_font is FontFile and (soft_font as FontFile).antialiasing == TextServer.FONT_ANTIALIASING_GRAY)
+	check("у мягкого шрифта буквы подстраиваются тоньше",
+		plain_font is FontFile and soft_font is FontFile
+		and (soft_font as FontFile).subpixel_positioning != (plain_font as FontFile).subpixel_positioning)
+	check("признак сглаживания фигур — да/нет", typeof(UiStyle.shapes_aa_supported()) == TYPE_BOOL)
+
+	# Мягкость краёв фигур: работает в любом графическом режиме (даже без MSAA)
+	UiStyle.apply_aa_level(0)
+	var hard_softness := UiStyle.shape_softness
+	UiStyle.apply_aa_level(3)
+	check("«Сглаживание» меняет мягкость краёв фигур", UiStyle.shape_softness > hard_softness,
+		"%s -> %s" % [str(hard_softness), str(UiStyle.shape_softness)])
+	check("панели используют эту мягкость",
+		is_equal_approx(UiStyle.box(Color(1, 1, 1, 0.1)).anti_aliasing_size, UiStyle.shape_softness),
+		str(UiStyle.box(Color(1, 1, 1, 0.1)).anti_aliasing_size))
+	UiStyle.apply_aa_level(1)
+
+	# Гладкие аватарки: круг рисуется крупной текстурой и уменьшается
+	var circle := UiStyle.circle_texture(Color("#2f7bff"), Color(1, 1, 1, 0.35), 64)
+	check("круг для аватарки получился", circle is GradientTexture2D and (circle as GradientTexture2D).width == 64,
+		str((circle as GradientTexture2D).width if circle is GradientTexture2D else -1))
+	check("у круга есть плавный край и обводка",
+		circle is GradientTexture2D and (circle as GradientTexture2D).gradient.offsets.size() == 4,
+		str((circle as GradientTexture2D).gradient.offsets.size() if circle is GradientTexture2D else -1))
+	if main.screen != null and main.screen.has_method("avatar"):
+		var av: Control = main.screen.avatar("админ2", 40)
+		check("аватарка нарисована гладким кружком",
+			av != null and find_by(av, func(n: Node) -> bool:
+				return n is TextureRect and (n as TextureRect).texture is GradientTexture2D) != null)
+		check("буква ника на аватарке на месте", av != null and find_label(av, "А") != null)
+		# Аватарку в дерево не добавляем — освобождаем сами
+		if av != null and is_instance_valid(av):
+			av.free()
+	Store.set_aa(1)
+
+	# Звук: тоны считаются в коде, звуковых файлов в проекте нет
+	var incoming: AudioStreamWAV = Sfx._stream("incoming")
+	check("звук нового сообщения собран", incoming != null and incoming.data.size() > 0,
+		str(incoming.data.size() if incoming != null else -1))
+	check("звук с нужной частотой", incoming.mix_rate == Sfx.RATE, str(incoming.mix_rate))
+	check("звуки запоминаются", Sfx._stream("incoming") == incoming)
+	check("звук отправки короче входящего", Sfx._stream("sent").data.size() < incoming.data.size())
+	check("неизвестного звука нет", Sfx._stream("неизвестный") == null)
+	check("по умолчанию звук включён", Store.sound_on())
+	Store.set_sound(false)
+	check("звук выключается", not Store.sound_on())
+	Sfx.play("incoming")  # выключен — просто ничего не делает
+	Store.set_sound(true)
+	Store.set_sound_volume(0.5)
+	check("громкость запоминается", is_equal_approx(Store.sound_volume(), 0.5), str(Store.sound_volume()))
+	Store.set_sound_volume(9.0)
+	check("громкость не выходит за границы", is_equal_approx(Store.sound_volume(), 1.0))
+	Store.set_sound_volume(0.7)
+
+	# Уведомления
+	check("по умолчанию уведомления включены", Store.notify_on())
+	Store.set_notify(false)
+	check("уведомления выключаются", not Store.notify_on())
+	Store.set_notify(true)
+
+	# Системные уведомления Windows (в автотестах их показывать нельзя)
+	check("по умолчанию уведомления Windows включены", Store.notify_os())
+	Store.set_notify_os(false)
+	check("уведомления Windows выключаются", not Store.notify_os())
+	Store.set_notify_os(true)
+	check("в безоконном режиме системных уведомлений нет", not TnNotify.available())
+	check("в автотесте системное уведомление не отправляется", not TnNotify.toast("Ваня", "привет"))
+	var ps: String = TnNotify.build_script("Ваня'с", "привет")
+	check("кавычка в тексте уведомления не ломает команду",
+		ps.contains("''") and ps.contains("ToastNotificationManager"))
+	check("длинный текст уведомления обрезается",
+		not TnNotify._clean("x".repeat(500), 100).contains("xxxxx".repeat(30)))
+	check("кириллица и эмодзи переживают кодирование",
+		TnNotify._decode_command(TnNotify._encode_command("Привет, мир! 👋")) == "Привет, мир! 👋")
+
+	# Всплывающая карточка о новом сообщении
+	main.clear_toasts()
+	main.show_toast("админ2", "привет")
+	await get_tree().process_frame
+	var tray: Control = main.ensure_toast_layer()
+	check("карточка уведомления появилась", count_nodes(tray, "PanelContainer") == 1,
+		str(count_nodes(tray, "PanelContainer")))
+	check("в карточке видно текст сообщения", find_label(tray, "привет") != null)
+	main.show_toast("админ2", "второе")
+	await get_tree().process_frame
+	check("карточки копятся", count_nodes(tray, "PanelContainer") == 2, str(count_nodes(tray, "PanelContainer")))
+	check("карточки стоят столбиком, а не друг на друге",
+		tray.get_child_count() == 1 and tray.get_child(0).get_child_count() == 2,
+		"слоёв: %d, в колонке: %d" % [tray.get_child_count(), tray.get_child(0).get_child_count()])
+	var cards: Array = tray.get_child(0).get_children()
+	if cards.size() == 2:
+		var c0 := cards[0] as Control
+		var c1 := cards[1] as Control
+		check("карточки уведомлений не перекрывают друг друга",
+			c0.position.y + c0.size.y <= c1.position.y + 1.0,
+			"первая до %d, вторая с %d" % [int(c0.position.y + c0.size.y), int(c1.position.y)])
+		check("карточка уведомления не уезжает за край окна",
+			c0.global_position.x + c0.size.x <= main.size.x + 1.0 and c0.size.x >= 200.0,
+			"правый край %d при ширине окна %d" % [int(c0.global_position.x + c0.size.x), int(main.size.x)])
+	else:
+		check("карточки уведомлений не перекрывают друг друга", false, "карточек: %d" % cards.size())
+		check("карточка уведомления не уезжает за край окна", false, "карточек: %d" % cards.size())
+	check("карточки поверх экрана", tray.get_index() == main.get_child_count() - 1)
+	main.clear_toasts()
+	await get_tree().process_frame
+	check("карточки убираются", count_nodes(tray, "PanelContainer") == 0)
+
+	# Обновления
+	Store.set_remote_version("")
+	check("без проверки обновления нет", Store.update_available() == "")
+	Store.set_remote_version("1.1")
+	check("старая версия на сайте — обновления нет", Store.update_available() == "")
+	Store.set_remote_version("1.99")
+	check("новая версия на сайте — предлагаем обновиться", Store.update_available() == "1.99", Store.update_available())
+	Store.set_remote_version("")
+	check("адрес сайта задан", Store.site_url().begins_with("https://"), Store.site_url())
+
+	# Версия из облака: приложение спрашивает таблицу «version», а не только сайт
+	check("адрес строки версии в облаке собран верно",
+		Protocol.version_url("https://x.supabase.co").ends_with("/rest/v1/version?select=*&order=updated_at.desc&limit=1"),
+		Protocol.version_url("https://x.supabase.co"))
+	var from_list := Protocol.parse_version_answer('[{"version":"1.3","notes":"починили","url":"https://a/b"}]')
+	check("версия из облака разбирается (список)", String(from_list.get("version", "")) == "1.3", str(from_list))
+	check("заметки к версии из облака разбираются", String(from_list.get("notes", "")) == "починили", str(from_list))
+	check("ссылка на новую версию разбирается", String(from_list.get("url", "")) == "https://a/b", str(from_list))
+	var from_obj := Protocol.parse_version_answer('{"version":"2.0"}')
+	check("версия из облака разбирается (объект)", String(from_obj.get("version", "")) == "2.0", str(from_obj))
+	check("пустой ответ облака не ломает разбор", Protocol.parse_version_answer("[]").is_empty())
+	check("битый ответ облака не ломает разбор", Protocol.parse_version_answer("<html>").is_empty())
+	check("без номера версии ответ пустой", Protocol.parse_version_answer('[{"notes":"x"}]').is_empty())
+	# Адрес облака берём именно облачный, даже если выбран свой сервер в сети
+	Store.set_relay("192.168.1.5", 7777, true, "")
+	check("для версий берётся облако, а не свой сервер",
+		Store.cloud_url().begins_with("https://") and Store.cloud_url().contains("supabase.co"), Store.cloud_url())
+	check("ключ облака подставляется для версий", Store.cloud_key() != "", Store.cloud_key().substr(0, 12) + "…")
+	Store.set_relay(Protocol.CLOUD_DEFAULT_URL, Protocol.DEFAULT_PORT, true, Protocol.CLOUD_DEFAULT_KEY)
+
+	var answered: Array = []
+	Net.fetch_text("", func(ok: bool, text: String) -> void:
+		answered.append([ok, text]))
+	await get_tree().process_frame
+	check("пустой адрес сайта не запрашивается",
+		answered.size() == 1 and bool(answered[0][0]) == false and String(answered[0][1]) == "", str(answered))
+	if OS.get_environment("TNGRAM_PROFILE").strip_edges() != "":
+		check("в проверках чужой сайт не опрашивается", not main._update_checked)
+
+	# Экран «Что нового»
+	main.show_screen("news", null)
+	await get_tree().process_frame
+	check("экран «Что нового» открывается", main.current_id == "news", main.current_id)
+	check("на экране видно заголовок", find_label(main.screen, Loc.t("news_title")) != null)
+	check("в списке есть текущая версия " + Protocol.APP_VERSION,
+		find_by(main.screen, func(n: Node) -> bool:
+			return n is Label and String(n.text).contains(Protocol.APP_VERSION)) != null)
+
+	# Настройки: новые разделы
+	main.show_screen("settings", null)
+	await get_tree().process_frame
+	check("в настройках есть раздел «Сглаживание»", find_label(main.screen, Loc.t("settings_graphics")) != null)
+	check("в настройках есть раздел «Звук»", find_label(main.screen, Loc.t("settings_sound")) != null)
+	check("в настройках есть раздел «Уведомления»", find_label(main.screen, Loc.t("settings_notify")) != null)
+	var aa_buttons := 0
+	for level in [0, 1, 2, 3]:
+		if find_by(main.screen, func(n: Node) -> bool:
+			return n is Button and String(n.text) == Loc.t("aa_%d" % level)) != null:
+			aa_buttons += 1
+	check("в настройках четыре уровня сглаживания", aa_buttons == 4, str(aa_buttons))
+	check("в настройках есть ползунок громкости", count_nodes(main.screen, "HSlider") == 1,
+		str(count_nodes(main.screen, "HSlider")))
+	check("в настройках есть включатели звука и уведомлений", count_nodes(main.screen, "CheckButton") >= 3,
+		str(count_nodes(main.screen, "CheckButton")))
+	check("в настройках видно версию приложения",
+		find_by(main.screen, func(n: Node) -> bool:
+			return n is Label and String(n.text).contains(Protocol.APP_VERSION)) != null)
+	check("из настроек есть дорога к «Что нового»", find_by(main.screen, func(n: Node) -> bool:
+		return n is Button and String(n.text) == Loc.t("settings_news")) != null)
+
+	# ---------------------------------------------------------- 15. Вход в облако
+	# Ник превращается в служебный адрес: почты у нас нет, а облако принимает
+	# только «почтовые» адреса. Один ник — один адрес, значит и один человек.
+	var mail_admin := Protocol.auth_email("Админ")
+	check("ник превращается в служебный адрес",
+		mail_admin.ends_with(Protocol.AUTH_DOMAIN) and mail_admin.length() > 10, mail_admin)
+	check("«Админ» и « админ » — один и тот же адрес",
+		Protocol.auth_email(" админ ") == mail_admin, Protocol.auth_email(" админ "))
+	check("разные ники — разные адреса", Protocol.auth_email("админ") != Protocol.auth_email("админ2"))
+	check("пустой ник — пустой адрес", Protocol.auth_email("   ") == "")
+	var latin_only := true
+	for i in mail_admin.length():
+		var code := mail_admin.unicode_at(i)
+		if not ((code >= 48 and code <= 57) or (code >= 97 and code <= 122) or code == 64 or code == 46):
+			latin_only = false
+	check("в адресе только латиница и цифры", latin_only, mail_admin)
+	check("адрес службы входа собран верно",
+		Protocol.auth_url("https://x.supabase.co", "signup") == "https://x.supabase.co/auth/v1/signup",
+		Protocol.auth_url("https://x.supabase.co", "signup"))
+
+	# Разбор ответа службы входа
+	var session := Protocol.parse_session('{"access_token":"aaa","refresh_token":"bbb","expires_in":3600,"user":{"id":"u-1"}}')
+	check("пропуск из ответа облака разбирается", String(session.get("access_token", "")) == "aaa", str(session))
+	check("ключ обновления разбирается", String(session.get("refresh_token", "")) == "bbb", str(session))
+	check("срок пропуска разбирается", int(session.get("expires_in", 0)) == 3600, str(session))
+	check("имя на сервере разбирается", String(session.get("user_id", "")) == "u-1", str(session))
+	check("ответ без пропуска входом не считается", Protocol.parse_session('{"user":{"id":"u-1"}}').is_empty())
+	check("битый ответ службы входа не ломает разбор", Protocol.parse_session("<html>").is_empty())
+	check("причина отказа разбирается",
+		Protocol.parse_auth_error('{"code":400,"error_code":"invalid_credentials","msg":"x"}') == "invalid_credentials",
+		Protocol.parse_auth_error('{"code":400,"error_code":"invalid_credentials","msg":"x"}'))
+	check("причина отказа без кода не ломает разбор", Protocol.parse_auth_error("garbage") == "")
+
+	# Пропуск живёт в аккаунте и переживает перезапуск
+	Store.login("админ", "")
+	check("без ответа облака пропуска нет", Store.auth_token() == "", Store.auth_token())
+	check("и «просроченным» он не считается", not Store.session_expired())
+	Store.set_session("админ", { "access_token": "tok1", "refresh_token": "ref1", "expires_in": 3600, "user_id": "u1" })
+	check("после ответа облака пропуск на месте", Store.auth_token() == "tok1", Store.auth_token())
+	check("сразу после выдачи пропуск ещё годен", not Store.session_expired())
+	check("ключ обновления сохранён", Store.refresh_value() == "ref1", Store.refresh_value())
+	check("чужому аккаунту пропуск не подставляется", Store.auth_token("админ2") == "", Store.auth_token("админ2"))
+	Store.save_data()
+	Store.accounts = []
+	Store.load_data()
+	check("пропуск переживает перезапуск", Store.auth_token("админ") == "tok1", Store.auth_token("админ"))
+	Store.clear_session("админ")
+	check("пропуск убирается", Store.auth_token("админ") == "", Store.auth_token("админ"))
+
+	Store.logout()
+
+	# ---------------------------------------------------------- 16. Итог и уборка
 	Store.delete_account("тест")
 	check("аккаунт удаляется", not Store.account_exists("тест"))
 	# Приводим данные к состоянию «первый запуск»: переписки нет, настройки по умолчанию
@@ -513,5 +864,15 @@ func _ready() -> void:
 		file.store_string("\n".join(lines))
 		file.close()
 		print("отчёт: ", ProjectSettings.globalize_path("user://smoke_report.txt"))
-	await get_tree().process_frame
+	# Уборка перед выходом: отпускаем всё, что держали в руках (само приложение,
+	# второго собеседника и сервер проверки). Без этого движок иногда сообщает,
+	# что пара объектов осталась в памяти — на работу это не влияет, но в отчёте
+	# выглядит как ошибка.
+	main.queue_free()
+	peer_client.queue_free()
+	main = null
+	peer_client = null
+	relay = null
+	for i in 5:
+		await get_tree().process_frame
 	get_tree().quit(1 if failures > 0 else 0)

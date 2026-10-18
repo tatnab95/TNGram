@@ -39,13 +39,26 @@ const STRINGS := {
 
 		# --- чаты ---
 		"chats_title": "Чаты",
-		"chats_empty": "Пока никого. Создай второй ник — и сможешь проверить переписку.",
+		"chats_empty": "Пока никого. Нажми «Новый чат» и впиши ник собеседника.",
 		"chats_new_nick": "Новый ник",
+		"chats_new_chat": "Новый чат",
 		"chats_logout": "Выйти",
 		"chats_you": "Это ты",
 		"chats_no_messages": "Сообщений пока нет",
 		"chats_on_device": "Переписка хранится только на этом устройстве",
 		"chats_remote": "собеседник по сети",
+		"chats_conflict": "Ник «%s» занят ещё кем-то. Пока это так, сообщения могут путаться — смени ник или попроси сменить его.",
+
+		# --- новый чат ---
+		"newchat_title": "Новый чат",
+		"newchat_subtitle": "Введи ник человека — откроется переписка с ним. Ник должен быть уже создан в Тнграме.",
+		"newchat_who": "Кому",
+		"newchat_who_hint": "ник собеседника",
+		"newchat_open": "Открыть чат",
+		"newchat_checking": "Проверяю ник…",
+		"newchat_self": "Это твой собственный ник.",
+		"newchat_no_such": "Такого ника в Тнграме нет. Проверь написание или открой всё равно.",
+		"newchat_open_anyway": "Всё равно открыть",
 
 		# --- чат ---
 		"chat_placeholder": "Сообщение…",
@@ -68,6 +81,40 @@ const STRINGS := {
 		"settings_about": "О приложении",
 		"settings_about_text": "Тнграм ещё в разработке. Сообщение уходит на сервер (свой или облачный), доходит до получателя и удаляется с сервера.",
 		"settings_soon_server": "Свой сервер работает внутри одной сети. Для связи из любой точки впиши адрес облака и ключ проекта.",
+		"settings_version": "версия %s",
+		"settings_news": "Что нового",
+
+		# --- сглаживание ---
+		"settings_graphics": "Сглаживание",
+		"aa_0": "Выключено",
+		"aa_1": "Обычное",
+		"aa_2": "Улучшенное",
+		"aa_3": "Максимум",
+		"settings_graphics_hint": "Мягкость букв и фона. «Выключено» — резкие пиксельные буквы, «Максимум» — самые гладкие.",
+		"settings_graphics_simple": "Твоя видеокарта работает в простом режиме: сглаживание текста и фона работает, а сглаживание краёв фигур — нет. Хочешь больше — запусти приложение через «TNGram-качество.bat».",
+
+		# --- звук ---
+		"settings_sound": "Звук",
+		"settings_sound_on": "Сигнал на новое сообщение",
+		"settings_sound_volume": "Громкость",
+
+		# --- уведомления ---
+		"settings_notify": "Уведомления",
+		"settings_notify_on": "Карточка о новом сообщении",
+		"settings_notify_hint": "Когда приходит сообщение, в углу появляется карточка. Щелчок по ней открывает чат.",
+		"settings_notify_os": "Уведомления Windows",
+		"settings_notify_os_hint": "Показывать системное уведомление, когда окно свёрнуто или не в фокусе. Его видно поверх других программ.",
+
+		# --- что нового ---
+		"news_title": "Что нового",
+		"news_subtitle": "Что изменилось в каждой версии Тнграма.",
+		"news_current": "Установлена версия %s — самая свежая.",
+		"news_update_title": "Вышла версия %s",
+		"news_update_text": "Твоя версия старее. Открой сайт и скачай новую — это бесплатно.",
+		"news_update_badge": "вышла версия %s",
+		"news_open_site": "Открыть сайт",
+		"update_title": "Тнграм",
+		"update_toast": "Вышла новая версия %s — нажми, чтобы узнать больше",
 
 		# --- связь ---
 		"net": "Связь",
@@ -86,6 +133,10 @@ const STRINGS := {
 		"net_note_online": "Связь есть: сообщение уйдёт на сервер, дойдёт до получателя и удалится с сервера.",
 		"net_note_offline": "Связи нет: сообщение пока сохранится только у тебя на устройстве.",
 		"net_bad_address": "Не понял адрес. Нужно «127.0.0.1:7777» или «https://проект.supabase.co»",
+		"server_cloud": "Сервер: облако Supabase",
+		"server_own": "Сервер: свой",
+		"ping_line": "Пинг %s мс",
+		"ping_wait": "Пинг…",
 
 		# --- ошибки ---
 		"err_nick_short": "Ник слишком короткий: нужно хотя бы 2 символа.",
@@ -94,8 +145,11 @@ const STRINGS := {
 		"err_no_account": "Аккаунт не найден.",
 		"err_pass_wrong": "Неверный пароль.",
 		"err_pass_mismatch": "Пароли не совпадают.",
+		"err_pass_short": "Пароль слишком короткий: нужно хотя бы 6 знаков.",
+		"login_checking": "Проверяем пароль на сервере…",
 		"err_pass_empty_second": "Повтори пароль ещё раз.",
-		"err_need_password": "Введи пароль"
+		"err_need_password": "Введи пароль",
+		"err_nick_cloud_taken": "Этот ник уже занят другим человеком. Выбери другой."
 	},
 	"en": {
 		# --- общее ---
@@ -131,13 +185,26 @@ const STRINGS := {
 
 		# --- чаты ---
 		"chats_title": "Chats",
-		"chats_empty": "Nobody here yet. Create a second nickname to try messaging.",
+		"chats_empty": "Nobody here yet. Tap \"New chat\" and type the other person's nickname.",
 		"chats_new_nick": "New nickname",
+		"chats_new_chat": "New chat",
 		"chats_logout": "Sign out",
 		"chats_you": "This is you",
 		"chats_no_messages": "No messages yet",
 		"chats_on_device": "Chats are stored on this device only",
 		"chats_remote": "peer over the network",
+		"chats_conflict": "The nickname \"%s\" is also used by someone else. Messages may get mixed up — change it.",
+
+		# --- новый чат ---
+		"newchat_title": "New chat",
+		"newchat_subtitle": "Type a person's nickname to open a chat with them. The nickname must already exist in Tngram.",
+		"newchat_who": "To",
+		"newchat_who_hint": "person's nickname",
+		"newchat_open": "Open chat",
+		"newchat_checking": "Checking…",
+		"newchat_self": "That is your own nickname.",
+		"newchat_no_such": "No such nickname in Tngram. Check the spelling or open it anyway.",
+		"newchat_open_anyway": "Open anyway",
 
 		# --- чат ---
 		"chat_placeholder": "Message…",
@@ -160,6 +227,40 @@ const STRINGS := {
 		"settings_about": "About",
 		"settings_about_text": "Tngram is still in development. A message goes to the server (yours or the cloud), reaches the recipient and is deleted from the server.",
 		"settings_soon_server": "Your own server works inside one network. For delivery anywhere, enter the cloud address and the project key.",
+		"settings_version": "version %s",
+		"settings_news": "What's new",
+
+		# --- сглаживание ---
+		"settings_graphics": "Smoothing",
+		"aa_0": "Off",
+		"aa_1": "Normal",
+		"aa_2": "Improved",
+		"aa_3": "Maximum",
+		"settings_graphics_hint": "How soft letters and the background look. \"Off\" — crisp pixelated letters, \"Maximum\" — the smoothest.",
+		"settings_graphics_simple": "Your graphics card is in simple mode: text and background smoothing work, but shape edges are not smoothed. Want more? Start the app via \"TNGram-качество.bat\".",
+
+		# --- звук ---
+		"settings_sound": "Sound",
+		"settings_sound_on": "Chime on a new message",
+		"settings_sound_volume": "Volume",
+
+		# --- уведомления ---
+		"settings_notify": "Notifications",
+		"settings_notify_on": "Pop-up card on a new message",
+		"settings_notify_hint": "When a message arrives, a card appears in the corner. Click it to open the chat.",
+		"settings_notify_os": "Windows notifications",
+		"settings_notify_os_hint": "Show a system notification when the window is minimised or in the background. It appears above other apps.",
+
+		# --- что нового ---
+		"news_title": "What's new",
+		"news_subtitle": "What changed in each version of Tngram.",
+		"news_current": "Version %s is installed — the latest one.",
+		"news_update_title": "Version %s is out",
+		"news_update_text": "Your version is older. Open the site and download the new one — it's free.",
+		"news_update_badge": "version %s is out",
+		"news_open_site": "Open the site",
+		"update_title": "Tngram",
+		"update_toast": "A new version %s is out — click to learn more",
 
 		# --- связь ---
 		"net": "Connection",
@@ -178,6 +279,10 @@ const STRINGS := {
 		"net_note_online": "Connected: the message goes to the server, reaches the recipient and is deleted from the server.",
 		"net_note_offline": "No connection: the message is stored on your device only.",
 		"net_bad_address": "Cannot read the address. Use \"127.0.0.1:7777\" or \"https://project.supabase.co\"",
+		"server_cloud": "Server: Supabase cloud",
+		"server_own": "Server: your own",
+		"ping_line": "Ping %s ms",
+		"ping_wait": "Ping…",
 
 		# --- ошибки ---
 		"err_nick_short": "Nickname is too short: at least 2 characters.",
@@ -186,8 +291,11 @@ const STRINGS := {
 		"err_no_account": "Account not found.",
 		"err_pass_wrong": "Wrong password.",
 		"err_pass_mismatch": "Passwords do not match.",
+		"err_pass_short": "Password is too short: at least 6 characters.",
+		"login_checking": "Checking your password on the server…",
 		"err_pass_empty_second": "Please repeat the password.",
-		"err_need_password": "Enter the password"
+		"err_need_password": "Enter the password",
+		"err_nick_cloud_taken": "This nickname is already taken by someone else. Pick another."
 	}
 }
 

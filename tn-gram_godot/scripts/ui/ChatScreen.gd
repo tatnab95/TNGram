@@ -6,8 +6,10 @@ var messages_box: VBoxContainer
 var scroller: ScrollContainer
 var input: LineEdit
 var note_label: Label
+var ping_label: Label
 
 func _ready() -> void:
+	Store.mark_read(peer)
 	build()
 	if not Store.data_changed.is_connected(_on_data_changed):
 		Store.data_changed.connect(_on_data_changed)
@@ -17,21 +19,55 @@ func _ready() -> void:
 	scroll_to_bottom()
 
 func _on_data_changed() -> void:
-	if is_inside_tree():
+	if not is_inside_tree():
+		return
+	if messages_box == null or not is_instance_valid(messages_box):
 		rebuild()
+		return
+	# Пришло новое сообщение — обновляем только список. Полная перерисовка
+	# стёрла бы текст, который человек печатает прямо сейчас, и сбила бы курсор.
+	Store.mark_read(peer)
+	fill_messages()
+	await get_tree().process_frame
+	scroll_to_bottom()
 
 ## Состояние связи изменилось — обновляем только подпись, не трогая ввод
 func net_changed() -> void:
 	if note_label != null and is_instance_valid(note_label):
 		note_label.text = _note_text()
+	if ping_label != null and is_instance_valid(ping_label):
+		ping_label.text = _ping_text()
 
 func _note_text() -> String:
 	return Loc.t("net_note_online") if Net.is_online() else Loc.t("net_note_offline")
 
+## Отклик сервера: «Пинг 84 мс», а пока не измерено — «Пинг…»
+func _ping_text() -> String:
+	if Net.ping_ms < 0:
+		return Loc.t("ping_wait")
+	return Loc.tf("ping_line", [str(Net.ping_ms)])
+
+## Полная перерисовка экрана (например, после смены темы). Не теряем то, что
+## уже напечатано, и возвращаем курсор туда, где он был.
 func rebuild() -> void:
+	var draft := ""
+	var caret := 0
+	var had_focus := false
+	if input != null and is_instance_valid(input):
+		draft = input.text
+		caret = input.caret_column
+		had_focus = input.has_focus()
+
 	for child in get_children():
 		child.queue_free()
 	build()
+
+	if draft != "" and input != null and is_instance_valid(input):
+		input.text = draft
+		input.caret_column = caret
+	if not had_focus and input != null and is_instance_valid(input):
+		input.release_focus()
+
 	await get_tree().process_frame
 	scroll_to_bottom()
 
@@ -55,6 +91,9 @@ func build() -> void:
 	var title := label(peer, 17)
 	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	top.add_child(title)
+	ping_label = label(_ping_text(), 12, pal()["muted"])
+	ping_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	top.add_child(ping_label)
 	top.add_child(spacer())
 	top.add_child(ghost_button(Loc.t("chat_delete"), func() -> void:
 		_confirm_delete()))

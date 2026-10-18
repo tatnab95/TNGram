@@ -65,6 +65,15 @@ func build() -> void:
 			app().rebuild()))
 	list.add_child(settings_row(Loc.t("settings_theme"), theme_buttons))
 
+	# --- сглаживание ---
+	list.add_child(graphics_block())
+
+	# --- звук ---
+	list.add_child(sound_block())
+
+	# --- уведомления ---
+	list.add_child(notify_block())
+
 	# --- связь ---
 	list.add_child(net_block())
 
@@ -81,11 +90,135 @@ func build() -> void:
 	var about := PanelContainer.new()
 	about.add_theme_stylebox_override("panel", UiStyle.box(pal()["panel"], 18, pal()["line"], 1, 16))
 	var about_box := vbox(8)
-	about_box.add_child(label(Loc.t("settings_about"), 15))
+	var about_row := hbox(12)
+	about_row.add_child(label(Loc.t("settings_about"), 15))
+	about_row.add_child(spacer())
+	about_row.add_child(hint(Loc.tf("settings_version", [P.APP_VERSION]), 13))
+	about_box.add_child(about_row)
 	about_box.add_child(hint(Loc.t("settings_about_text"), 13))
 	about_box.add_child(accent_label(Loc.t("settings_soon_server"), 13, true))
+	var news_row := hbox(10)
+	news_row.add_child(ghost_button(Loc.t("settings_news"), func() -> void:
+		navigate.emit("news", null)))
+	var update := Store.update_available()
+	if update != "":
+		news_row.add_child(accent_label(Loc.tf("news_update_badge", [update]), 13, true))
+	about_box.add_child(news_row)
 	about.add_child(about_box)
 	list.add_child(about)
+
+## ------------------------------------------------------------- сглаживание
+
+## Качество картинки: сглаживание текста и (где умеет видеокарта) фигур.
+func graphics_block() -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", UiStyle.box(pal()["panel"], 18, pal()["line"], 1, 16))
+
+	var box := vbox(10)
+	box.add_child(label(Loc.t("settings_graphics"), 15))
+
+	var buttons := hbox(8)
+	for level in [0, 1, 2, 3]:
+		buttons.add_child(toggle_button(Loc.t("aa_%d" % level), Store.aa_level() == level, func() -> void:
+			Store.set_aa(level)
+			app().rebuild()))
+	box.add_child(buttons)
+
+	box.add_child(hint(Loc.t("settings_graphics_hint"), 12))
+	if not UiStyle.shapes_aa_supported():
+		box.add_child(hint(Loc.t("settings_graphics_simple"), 12))
+
+	panel.add_child(box)
+	return panel
+
+## ------------------------------------------------------------- звук
+
+func sound_block() -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", UiStyle.box(pal()["panel"], 18, pal()["line"], 1, 16))
+
+	var box := vbox(10)
+	box.add_child(label(Loc.t("settings_sound"), 15))
+
+	var on_row := hbox(8)
+	var check := CheckButton.new()
+	check.button_pressed = Store.sound_on()
+	check.focus_mode = Control.FOCUS_NONE
+	check.toggled.connect(func(on: bool) -> void:
+		Store.set_sound(on)
+		if on:
+			Sfx.play("incoming"))
+	on_row.add_child(check)
+	var on_label := label(Loc.t("settings_sound_on"), 14)
+	on_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	on_row.add_child(on_label)
+	on_row.add_child(spacer())
+	box.add_child(on_row)
+
+	var volume_row := hbox(10)
+	var volume_label := label(Loc.t("settings_sound_volume"), 14)
+	volume_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	volume_row.add_child(volume_label)
+	var slider := HSlider.new()
+	slider.min_value = 0.0
+	slider.max_value = 1.0
+	slider.step = 0.05
+	slider.value = Store.sound_volume()
+	slider.custom_minimum_size = Vector2(180, 0)
+	slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	slider.value_changed.connect(func(value: float) -> void:
+		Store.set_sound_volume(value))
+	slider.drag_ended.connect(func(_changed: bool) -> void:
+		Sfx.play("incoming"))
+	volume_row.add_child(spacer())
+	volume_row.add_child(slider)
+	box.add_child(volume_row)
+
+	panel.add_child(box)
+	return panel
+
+## ------------------------------------------------------------- уведомления
+
+func notify_block() -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", UiStyle.box(pal()["panel"], 18, pal()["line"], 1, 16))
+
+	var box := vbox(10)
+	box.add_child(label(Loc.t("settings_notify"), 15))
+
+	var row := hbox(8)
+	var check := CheckButton.new()
+	check.button_pressed = Store.notify_on()
+	check.focus_mode = Control.FOCUS_NONE
+	check.toggled.connect(func(on: bool) -> void:
+		Store.set_notify(on))
+	row.add_child(check)
+	var on_label := label(Loc.t("settings_notify_on"), 14)
+	on_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(on_label)
+	row.add_child(spacer())
+	box.add_child(row)
+	box.add_child(hint(Loc.t("settings_notify_hint"), 12))
+
+	# Системные уведомления Windows: их видно, даже когда окно свёрнуто.
+	if OS.has_feature("windows"):
+		var os_row := hbox(8)
+		var os_check := CheckButton.new()
+		os_check.name = "NotifyOs"
+		os_check.button_pressed = Store.notify_os()
+		os_check.focus_mode = Control.FOCUS_NONE
+		os_check.toggled.connect(func(on: bool) -> void:
+			Store.set_notify_os(on))
+		os_row.add_child(os_check)
+		var os_label := label(Loc.t("settings_notify_os"), 14)
+		os_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		os_row.add_child(os_label)
+		os_row.add_child(spacer())
+		box.add_child(os_row)
+		box.add_child(hint(Loc.t("settings_notify_os_hint"), 12))
+
+	panel.add_child(box)
+	return panel
 
 ## ------------------------------------------------------------- связь
 

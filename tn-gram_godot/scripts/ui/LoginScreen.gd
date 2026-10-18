@@ -1,8 +1,11 @@
 extends ScreenBase
 ## Экран входа: выбор аккаунта на устройстве, вход, переход к созданию ника.
 
+const P := preload("res://scripts/net/Protocol.gd")
+
 var password_for := ""   ## если не пусто — показываем шаг ввода пароля
 var error_code := ""
+var busy := false        ## спрашиваем сервер — кнопку временно не нажимать
 
 func _ready() -> void:
 	build()
@@ -112,7 +115,12 @@ func build_password_step(column: VBoxContainer) -> void:
 	column.add_child(field)
 
 	var enter := accent_button(Loc.t("login_enter"), func() -> void: _try_login(password_for, field.text))
+	enter.disabled = busy
 	column.add_child(enter)
+	if busy:
+		var waiting := hint(Loc.t("login_checking"))
+		waiting.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		column.add_child(waiting)
 	field.text_submitted.connect(func(_t: String) -> void: _try_login(password_for, field.text))
 
 	var back := ghost_button(Loc.t("login_back"), func() -> void:
@@ -135,13 +143,87 @@ func _on_pick_account(nick: String) -> void:
 	_try_login(nick, "")
 
 func _try_login(nick: String, password: String) -> void:
-	var result := Store.login(nick, password)
-	if bool(result.get("ok", false)):
-		navigate.emit("chats", null)
+	if busy:
 		return
-	error_code = String(result.get("error", ""))
-	password_for = nick
-	rebuild()
+	var result := Store.login(nick, password)
+	if not bool(result.get("ok", false)):
+		error_code = String(result.get("error", ""))
+		password_for = nick
+		rebuild()
+		return
+	# Пароль верный на устройстве. Если облако доступно — спрашиваем у него:
+	# главное слово за сервером, он знает, чей ник на самом деле.
+	if password.strip_edges() != "" and _cloud_ready():
+		busy = true
+		error_code = ""
+		password_for = nick
+		rebuild()
+		var verdict := await _cloud_login(nick, password)
+		if not is_instance_valid(self) or not is_inside_tree():
+			return
+		busy = false
+		if verdict == "wrong":
+			Store.logout()
+			error_code = "err_pass_wrong"
+			password_for = nick
+			rebuild()
+			return
+	navigate.emit("chats", null)
+
+## Облако вообще применимо? В проверках настоящее облако не трогаем.
+func _cloud_ready() -> bool:
+	if OS.get_environment("TNGRAM_PROFILE").strip_edges() != "":
+		return false
+	return P.is_cloud(Store.relay_host())
+
+## Спросить сервер, наш ли это ник и пароль. Возвращает:
+## "ok" — пустил (пропуск сохранён), "wrong" — пароль не тот, "offline" — молчит.
+## Если ника на сервере ещё нет (аккаунт заведён раньше входа), заводим его.
+func _cloud_login(nick: String, password: String) -> String:
+	var state := { "done": false, "ok": false, "reason": "" }
+	Net.cloud_auth_login(Store.relay_host(), Store.relay_key(), nick, password,
+		func(ok: bool, reason: String, session: Dictionary) -> void:
+			state["done"] = true
+			state["ok"] = ok
+			state["reason"] = reason
+			if ok:
+				Store.set_session(nick, session))
+	await _await_state(state, 10000)
+	if not bool(state["done"]):
+		return "offline"
+	if bool(state["ok"]):
+		return "ok"
+	var reason := String(state["reason"])
+	if reason != "invalid_credentials" and reason != "user_not_found":
+		return "offline"
+	# Ника на сервере нет — заводим его с этим же паролем
+	var signup := { "done": false, "ok": false, "reason": "" }
+	Net.cloud_auth_signup(Store.relay_host(), Store.relay_key(), nick, password,
+		func(ok: bool, r: String, session: Dictionary) -> void:
+			signup["done"] = true
+			signup["ok"] = ok
+			signup["reason"] = r
+			if ok:
+				Store.set_session(nick, session))
+	await _await_state(signup, 10000)
+	if not bool(signup["done"]):
+		return "offline"
+	if bool(signup["ok"]):
+		return "ok"
+	if String(signup["reason"]) == "user_already_exists":
+		return "wrong"
+	return "offline"
+
+## Ждать ответа сети, но не дольше отведённого срока
+func _await_state(state: Dictionary, ms: int) -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	var deadline := Time.get_ticks_msec() + ms
+	while not bool(state.get("done", false)) and Time.get_ticks_msec() < deadline:
+		await tree.process_frame
+		if not is_instance_valid(self):
+			return
 
 ## ------------------------------------------------------------- вспомогательное
 

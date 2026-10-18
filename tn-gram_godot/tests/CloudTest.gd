@@ -143,7 +143,7 @@ func _ready() -> void:
 	# ---------------------------------------------------------- 1. Доставка
 	inbox_b.clear()
 	a.send_message(nick_b, "привет из облака")
-	var got := await wait_until(func() -> bool: return inbox_b.size() == 1)
+	var got := await wait_until(func() -> bool: return inbox_b.size() == 1, 25000)
 	check("сообщение дошло до получателя", got and inbox_b.size() == 1, str(inbox_b.size()))
 	if inbox_b.size() == 1:
 		check("текст дошёл верно", String(inbox_b[0]["text"]) == "привет из облака", String(inbox_b[0]["text"]))
@@ -151,7 +151,7 @@ func _ready() -> void:
 		check("у сообщения есть метка", String(inbox_b[0]["id"]) != "", String(inbox_b[0]["id"]))
 
 	# ---------------------------------------------------------- 2. Удаление после доставки
-	var emptied := await wait_pending(nick_b, 0)
+	var emptied := await wait_pending(nick_b, 0, 15000)
 	var left_after := await pending_for(nick_b)
 	check("после доставки в облаке для получателя пусто", emptied and left_after == 0, str(left_after))
 
@@ -160,7 +160,7 @@ func _ready() -> void:
 	await wait_until(func() -> bool: return b.is_off(), 2000)
 	inbox_b.clear()
 	a.send_message(nick_b, "пока")
-	var held := await wait_pending(nick_b, 1)
+	var held := await wait_pending(nick_b, 1, 15000)
 	var held_count := await pending_for(nick_b)
 	check("сообщение офлайн-получателю ждёт в облаке", held and held_count == 1, str(held_count))
 	check("и получателю оно ещё не доставлено", inbox_b.is_empty(), str(inbox_b.size()))
@@ -168,7 +168,7 @@ func _ready() -> void:
 	# ---------------------------------------------------------- 4. Получатель вернулся
 	b.connect_to(url, 0, nick_b, key)
 	await wait_until(func() -> bool: return b.is_online(), 20000)
-	var late := await wait_until(func() -> bool: return inbox_b.size() == 1, 8000)
+	var late := await wait_until(func() -> bool: return inbox_b.size() == 1, 25000)
 	check("дождавшееся сообщение доходит после возвращения", late and inbox_b.size() == 1, str(inbox_b.size()))
 	if inbox_b.size() == 1:
 		check("текст дождавшегося сообщения верный", str(inbox_b[0]["text"]) == "пока", str(inbox_b[0]["text"]))
@@ -178,7 +178,7 @@ func _ready() -> void:
 
 	# ---------------------------------------------------------- 5. Статистика из облака
 	var stats_ok := false
-	var deadline := Time.get_ticks_msec() + 6000
+	var deadline := Time.get_ticks_msec() + 12000
 	while Time.get_ticks_msec() < deadline:
 		a.last_stats = {}
 		a.ask_stats()

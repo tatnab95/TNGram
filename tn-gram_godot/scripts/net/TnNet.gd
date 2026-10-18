@@ -25,6 +25,10 @@ const CONNECT_TIMEOUT := 3.5
 const CLOUD_TIMEOUT := 12.0
 ## Раз в сколько секунд напоминать облаку, что мы ещё здесь
 const CLOUD_HEARTBEAT := 25.0
+## Раз в сколько секунд сами заглядывать в таблицу: поток изменений иногда теряет
+## событие, а сообщение при этом спокойно лежит в облаке и ждёт. Такая «проверка
+## пропущенного» делает доставку надёжной, даже если поток промолчал.
+const CLOUD_CATCHUP := 12.0
 
 enum State { OFF, CONNECTING, ONLINE }
 enum Mode { TCP, CLOUD }
@@ -34,10 +38,13 @@ var host := P.DEFAULT_HOST
 var port := P.DEFAULT_PORT
 var nick := ""
 var cloud_key := ""             ## публичный ключ проекта (для облака)
+var auth_token := ""            ## пропуск вошедшего человека (пусто — только ключ)
 var mode: int = Mode.TCP        ## выбранный способ связи (по адресу)
 var keep_trying := true         ## пробовать снова, если не получилось
 var debug := false              ## писать в notice каждую строку протокола
 var last_stats: Dictionary = {} ## последний ответ сервера на «stats» (для проверок)
+var ping_ms := -1               ## отклик сервера в миллисекундах (-1 — ещё не измерен)
+var _ping_sent_at := 0          ## когда отправили запрос, по которому считаем отклик
 
 ## Вызывается при входящем сообщении: on_message(from, text, ts, id) -> bool.
 ## Должна вернуть true, если сообщение сохранено — только тогда сервер удалит его у себя.
@@ -55,6 +62,9 @@ var _status_arg := ""
 ## ---- облако ----
 var _cloud_base := ""           ## «https://проект.supabase.co»
 var _ws := WebSocketPeer.new()
+## Чем проверять шифрование: обычно — стандартные корни. Если в системе они
+## не работают (так бывает на Android), сюда кладут свои корни из файла.
+var tls_options: TLSOptions = null
 var _http: HTTPRequest = null
 var _http_job: Dictionary = {}
 var _http_queue: Array = []
@@ -63,12 +73,15 @@ var _joined := false            ## вошли ли в канал изменен�
 var _join_sent := false
 var _ref := 0                   ## счётчик запросов к каналу
 var _hb := 0.0                  ## таймер «я ещё здесь»
+var _catchup := CLOUD_CATCHUP   ## таймер «не пропустили ли сообщение»
 var _seen: Dictionary = {}      ## уже забранные сообщения (по метке)
 
 func _ready() -> void:
 	set_process(true)
 	_http = HTTPRequest.new()
 	_http.name = "Cloud"
+	# Чтобы проверка ника не висела вечно, если облако молчит
+	_http.timeout = 10.0
 	_http.request_completed.connect(_on_http_completed)
 	add_child(_http)
 
@@ -107,6 +120,8 @@ func stop() -> void:
 	_buffer = ""
 	_join_sent = false
 	_joined = false
+	ping_ms = -1
+	_ping_sent_at = 0
 	_http_queue.clear()
 	if _ws != null:
 		_ws.close()
@@ -140,9 +155,114 @@ func ask_stats() -> void:
 		return
 	_send_line({ "t": P.C_STATS })
 
+## Измерить отклик сервера: сколько миллисекунд идёт ответ. Результат ложится в
+## ping_ms, о нём узнают экраны (сигнал changed). Ничего лишнего не спрашиваем:
+## у своего сервера — короткий «stats», у облака — крохотная таблица версии.
+func measure_ping() -> void:
+	if state != State.ONLINE:
+		if ping_ms != -1:
+			ping_ms = -1
+			emit_signal("changed")
+		return
+	_ping_sent_at = Time.get_ticks_msec()
+	if mode == Mode.CLOUD:
+		_queue_http("ping", "GET", P.version_url(_cloud_base), null, [], { "key": cloud_key })
+		return
+	# Сокет вдруг разорвался — не шлём запрос в пустоту, отклик недоступен
+	if _peer.get_status() != StreamPeerTCP.STATUS_CONNECTED:
+		_ping_sent_at = 0
+		return
+	_send_line({ "t": P.C_STATS })
+
+## Записать отклик, если мы его ждали (ответ пришёл — считаем разницу)
+func _note_ping() -> void:
+	if _ping_sent_at <= 0:
+		return
+	ping_ms = maxi(int(Time.get_ticks_msec() - _ping_sent_at), 1)
+	_ping_sent_at = 0
+	emit_signal("changed")
+
+## ------------------------------------------------------------------ ники в облаке
+
+## Свободен ли ник? Ответ придёт в answer(ok, taken, pass_hash):
+## ok=false — облако недоступно; taken=true — ник уже занят кем-то.
+## Работает и без подключённого канала сообщений — обычным запросом к таблице.
+func cloud_lookup_nick(base_url: String, key: String, nick: String, answer: Callable) -> void:
+	var base := base_url.strip_edges().trim_suffix("/")
+	if base == "" or key.strip_edges() == "" or P.nick_key(nick) == "":
+		answer.call(false, false, "")
+		return
+	_queue_http("nick_lookup", "GET",
+		P.rest_url(base, P.PROFILES_TABLE + "?select=pass_hash,nick&nick_key=eq." + P.nick_key(nick).uri_encode()),
+		null, [], { "key": key, "cb": answer })
+
+## Занять ник в облаке насовсем. answer(ok, busy): busy=true — ник уже за другим.
+func cloud_claim_nick(base_url: String, key: String, nick: String, pass_hash: String, answer: Callable) -> void:
+	var base := base_url.strip_edges().trim_suffix("/")
+	if base == "" or key.strip_edges() == "" or P.nick_key(nick) == "":
+		answer.call(false, false)
+		return
+	_queue_http("nick_claim", "POST", P.rest_url(base, P.PROFILES_TABLE), {
+		"nick_key": P.nick_key(nick),
+		"nick": nick.strip_edges(),
+		"pass_hash": pass_hash
+	}, ["Prefer: return=minimal"], { "key": key, "cb": answer })
+
+## Узнать у облака последнюю версию приложения. answer(ok, { "version", "notes", "url" }).
+## Работает и без подключённого канала — обычным запросом к таблице.
+func cloud_fetch_version(base_url: String, key: String, answer: Callable) -> void:
+	var base := base_url.strip_edges().trim_suffix("/")
+	if base == "" or key.strip_edges() == "":
+		answer.call(false, {})
+		return
+	_queue_http("version", "GET", P.version_url(base), null, [], { "key": key, "cb": answer })
+
+## ------------------------------------------------------------------ вход в облако
+## Ник превращается в служебный адрес (см. Protocol.auth_email) — почты у нас нет.
+## Облако проверяет пароль и выдаёт пропуск; пропуск и есть доказательство, кто ты.
+
+## Зарегистрировать ник в облаке. answer(ok, причина, пропуск)
+func cloud_auth_signup(base_url: String, key: String, nick: String, password: String, answer: Callable) -> void:
+	_auth_request("auth_signup", "signup", base_url, key, P.auth_email(nick), password, answer)
+
+## Войти по нику и паролю. answer(ok, причина, пропуск)
+func cloud_auth_login(base_url: String, key: String, nick: String, password: String, answer: Callable) -> void:
+	_auth_request("auth_login", "token?grant_type=password", base_url, key, P.auth_email(nick), password, answer)
+
+## Обновить пропуск по ключу обновления (пропуск живёт час). answer(ok, причина, пропуск)
+func cloud_auth_refresh(base_url: String, key: String, refresh_token: String, answer: Callable) -> void:
+	var base := base_url.strip_edges().trim_suffix("/")
+	if base == "" or key.strip_edges() == "" or refresh_token.strip_edges() == "":
+		answer.call(false, "bad_request", {})
+		return
+	_queue_http("auth_refresh", "POST", P.auth_url(base, "token?grant_type=refresh_token"),
+		{ "refresh_token": refresh_token.strip_edges() }, [], { "key": key, "cb": answer })
+
+func _auth_request(tag: String, path: String, base_url: String, key: String, email: String, password: String, answer: Callable) -> void:
+	var base := base_url.strip_edges().trim_suffix("/")
+	if base == "" or key.strip_edges() == "" or email == "":
+		answer.call(false, "bad_request", {})
+		return
+	_queue_http(tag, "POST", P.auth_url(base, path),
+		{ "email": email, "password": password }, [], { "key": key, "cb": answer })
+
+## ------------------------------------------------------------------ обычные файлы
+
+## Забрать текстовый файл по обычному адресу (например, version.json с сайта).
+## Ключ облака сюда не отправляем: это чужой сервер. answer(ok, текст).
+func fetch_text(url: String, answer: Callable) -> void:
+	var u := url.strip_edges()
+	if u == "":
+		answer.call(false, "")
+		return
+	_queue_http("text", "GET", u, null, [], { "cb": answer, "plain": true })
+
 ## ------------------------------------------------------------------ соединение
 
 func _process(delta: float) -> void:
+	# Служебные запросы к облаку (проверка и занятие ников) идут всегда —
+	# даже когда канал сообщений ещё не подключён.
+	_pump_http()
 	if mode == Mode.CLOUD:
 		_process_cloud(delta)
 		return
@@ -187,6 +307,8 @@ func _fail(key: String) -> void:
 	state = State.OFF
 	_join_sent = false
 	_joined = false
+	ping_ms = -1
+	_ping_sent_at = 0
 	if mode == Mode.CLOUD:
 		if _ws != null:
 			_ws.close()
@@ -219,13 +341,15 @@ func _try_cloud() -> void:
 	_seen.clear()
 	state = State.CONNECTING
 	_ws = WebSocketPeer.new()
-	if _ws.connect_to_url(P.realtime_url(_cloud_base, cloud_key)) != OK:
+	var opts := tls_options
+	if opts == null:
+		opts = TLSOptions.client()
+	if _ws.connect_to_url(P.realtime_url(_cloud_base, cloud_key), opts) != OK:
 		_fail("net_failed")
 		return
 	_set_status("net_connecting", _cloud_base)
 
 func _process_cloud(delta: float) -> void:
-	_pump_http()
 	if state == State.OFF:
 		if _want and keep_trying:
 			_retry_wait -= delta
@@ -253,7 +377,7 @@ func _process_cloud(delta: float) -> void:
 									"filter": "to_nick=eq." + nick
 								}]
 							},
-							"access_token": cloud_key
+							"access_token": auth_token if auth_token.strip_edges() != "" else cloud_key
 						},
 						"ref": _next_ref()
 					})
@@ -265,6 +389,11 @@ func _process_cloud(delta: float) -> void:
 			if _hb >= CLOUD_HEARTBEAT:
 				_hb = 0.0
 				_send_ws({ "topic": "phoenix", "event": "heartbeat", "payload": {}, "ref": _next_ref() })
+			# Заглядываем в таблицу сами: поток изменений иногда теряет событие
+			_catchup -= delta
+			if _catchup <= 0.0:
+				_catchup = CLOUD_CATCHUP
+				_fetch_pending()
 		WebSocketPeer.STATE_CONNECTING:
 			_connect_elapsed += delta
 			if _connect_elapsed > CLOUD_TIMEOUT:
@@ -312,6 +441,7 @@ func _go_online_cloud() -> void:
 	state = State.ONLINE
 	_retry_step = 0.5
 	_hb = 0.0
+	_catchup = CLOUD_CATCHUP
 	_set_status("net_online", nick)
 	# Пока нас не было, сообщения копились в таблице — забираем их
 	_fetch_pending()
@@ -369,19 +499,27 @@ func _deliver_cloud_row(row: Dictionary) -> void:
 
 ## ------------------------------------------------------------------ облачный обмен
 
-func _cloud_headers(extra: Array = []) -> PackedStringArray:
-	var headers := PackedStringArray([
-		"apikey: " + cloud_key,
-		"Authorization: Bearer " + cloud_key,
-		"Content-Type: application/json",
-		"Accept: application/json"
-	])
+func _cloud_headers(extra: Array = [], key: String = "", plain: bool = false) -> PackedStringArray:
+	var headers := PackedStringArray()
+	if plain:
+		# Обычный запрос к чужому серверу: без ключей нашего облака
+		headers.append("Accept: application/json")
+	else:
+		var token := key if key.strip_edges() != "" else cloud_key
+		headers.append("apikey: " + token)
+		# Пропуск человека (если он есть) — по нему облако узнаёт, чьи это сообщения
+		var bearer := token
+		if auth_token.strip_edges() != "":
+			bearer = auth_token.strip_edges()
+		headers.append("Authorization: Bearer " + bearer)
+		headers.append("Content-Type: application/json")
+		headers.append("Accept: application/json")
 	for line in extra:
 		headers.append(String(line))
 	return headers
 
-func _queue_http(tag: String, method: String, url: String, body: Variant = null, extra: Array = []) -> void:
-	_http_queue.append({ "tag": tag, "method": method, "url": url, "body": body, "extra": extra })
+func _queue_http(tag: String, method: String, url: String, body: Variant = null, extra: Array = [], meta: Dictionary = {}) -> void:
+	_http_queue.append({ "tag": tag, "method": method, "url": url, "body": body, "extra": extra, "meta": meta })
 
 ## По одному запросу за раз: HTTPRequest не умеет несколько сразу
 func _pump_http() -> void:
@@ -399,7 +537,8 @@ func _pump_http() -> void:
 	_http_job = job
 	_http_busy = true
 	_note("⇒ " + String(job["method"]) + " " + String(job["url"]))
-	if _http.request(String(job["url"]), _cloud_headers(job["extra"]), method, body_text) != OK:
+	var meta: Dictionary = job.get("meta", {})
+	if _http.request(String(job["url"]), _cloud_headers(job["extra"], String(meta.get("key", "")), bool(meta.get("plain", false))), method, body_text) != OK:
 		_http_busy = false
 		_note("не смог начать запрос")
 
@@ -407,14 +546,61 @@ func _on_http_completed(result: int, code: int, headers: PackedStringArray, body
 	_http_busy = false
 	var job: Dictionary = _http_job
 	_http_job = {}
+	var tag := String(job.get("tag", ""))
+	var callback: Callable = (job.get("meta", {}) as Dictionary).get("cb", Callable())
 	if result != HTTPRequest.RESULT_SUCCESS:
 		_note("сетевая ошибка запроса: " + str(result))
+		if tag == "nick_claim" and callback.is_valid():
+			callback.call(false, false)
+		elif tag == "nick_lookup" and callback.is_valid():
+			callback.call(false, false, "")
+		elif tag == "version" and callback.is_valid():
+			callback.call(false, {})
+		elif tag == "text" and callback.is_valid():
+			callback.call(false, "")
+		elif tag.begins_with("auth_") and callback.is_valid():
+			# Облако не ответило — вход продолжится по устройству (запасной путь)
+			callback.call(false, "net_error", {})
 		return
 	var text := body.get_string_from_utf8()
 	if code >= 400:
 		_note("облако ответило %d: %s" % [code, text])
+		# 409 — ник уже занят другим человеком
+		if tag == "nick_claim" and callback.is_valid():
+			callback.call(true, code == 409)
+		elif tag == "nick_lookup" and callback.is_valid():
+			callback.call(false, false, "")
+		elif tag == "version" and callback.is_valid():
+			# Таблицы версии может ещё не быть — это не ошибка, просто ответа нет
+			callback.call(false, {})
+		elif tag == "text" and callback.is_valid():
+			callback.call(false, "")
+		elif tag.begins_with("auth_") and callback.is_valid():
+			# 400 — не тот пароль или ник занят; причина приходит словами
+			callback.call(false, P.parse_auth_error(text), {})
 		return
-	match String(job.get("tag", "")):
+	match tag:
+		"version":
+			if callback.is_valid():
+				callback.call(true, P.parse_version_answer(text))
+		"text":
+			if callback.is_valid():
+				callback.call(true, text)
+		"nick_lookup":
+			var taken := false
+			var pass_hash := ""
+			var parsed: Variant = JSON.parse_string(text)
+			if typeof(parsed) == TYPE_ARRAY and (parsed as Array).size() > 0:
+				taken = true
+				pass_hash = String((parsed[0] as Dictionary).get("pass_hash", ""))
+			if callback.is_valid():
+				callback.call(true, taken, pass_hash)
+		"nick_claim":
+			if callback.is_valid():
+				callback.call(true, false)
+		"auth_signup", "auth_login", "auth_refresh":
+			if callback.is_valid():
+				callback.call(true, "", P.parse_session(text))
 		"pending":
 			var parsed: Variant = JSON.parse_string(text)
 			if typeof(parsed) == TYPE_ARRAY:
@@ -427,6 +613,8 @@ func _on_http_completed(result: int, code: int, headers: PackedStringArray, body
 				if String(line).to_lower().begins_with("content-range:"):
 					total = int(String(line).split("/")[-1])
 			last_stats = { "pending": maxi(total, 0), "online": -1, "cloud": true, "delivered": 0, "deleted": 0 }
+		"ping":
+			_note_ping()
 
 ## ------------------------------------------------------------------ приём
 
@@ -463,6 +651,7 @@ func _handle_line(line: String) -> void:
 			_set_status("net_server_error", String(msg.get("text", "")))
 		P.S_STATS:
 			last_stats = msg
+			_note_ping()
 		P.S_SENT:
 			pass
 		_:

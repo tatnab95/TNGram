@@ -1,7 +1,10 @@
 extends ScreenBase
 ## Экран создания ника: имя + необязательный пароль. Номер телефона не нужен.
 
+const P := preload("res://scripts/net/Protocol.gd")
+
 var error_code := ""
+var typed_nick := ""   ## что ввёл человек, чтобы не потерять при перерисовке
 
 func _ready() -> void:
 	build()
@@ -61,6 +64,7 @@ func build() -> void:
 	var nick_edit: LineEdit = nick_pair[1]
 	var pass_edit: LineEdit = pass_pair[1]
 	var repeat_edit: LineEdit = repeat_pair[1]
+	nick_edit.text = typed_nick
 
 	# Ошибка
 	if error_code != "":
@@ -84,10 +88,51 @@ func build() -> void:
 ## ------------------------------------------------------------- действия
 
 func _submit(nick: String, password: String, repeat: String) -> void:
+	typed_nick = nick.strip_edges()
 	if password != repeat:
 		error_code = "err_pass_mismatch"
 		rebuild()
 		return
+
+	if password != "" and password.length() < P.AUTH_MIN_PASSWORD:
+		error_code = "err_pass_short"
+		rebuild()
+		return
+
+	var err := Store.nick_error(nick)
+	if err != "":
+		error_code = err
+		rebuild()
+		return
+
+	# Спросить облако: свободен ли ник для всех, а не только на этом устройстве.
+	var verdict := await _cloud_verdict(nick, password)
+	if not is_instance_valid(self) or not is_inside_tree():
+		return
+	if verdict == "taken":
+		error_code = "err_nick_cloud_taken"
+		rebuild()
+		return
+	if verdict == "free":
+		# Занимаем ник, чтобы больше никто не смог назваться так же.
+		var claimed := await _claim_nick(nick, password)
+		if not is_instance_valid(self) or not is_inside_tree():
+			return
+		if not claimed:
+			error_code = "err_nick_cloud_taken"
+			rebuild()
+			return
+
+	# Заводим вход в облаке: сервер проверит пароль и выдаст пропуск в переписку.
+	var auth := { "verdict": "skip", "session": {} }
+	if password != "":
+		auth = await _cloud_auth(nick, password)
+		if not is_instance_valid(self) or not is_inside_tree():
+			return
+		if String(auth["verdict"]) == "taken":
+			error_code = "err_nick_cloud_taken"
+			rebuild()
+			return
 
 	var result := Store.create_account(nick, password)
 	if not bool(result.get("ok", false)):
@@ -95,12 +140,105 @@ func _submit(nick: String, password: String, repeat: String) -> void:
 		rebuild()
 		return
 
+	# Пропуск кладём только теперь: до создания аккаунта его некуда положить.
+	if not (auth["session"] as Dictionary).is_empty():
+		Store.set_session(nick, auth["session"])
+
 	var login_result := Store.login(nick, password)
 	if bool(login_result.get("ok", false)):
 		navigate.emit("chats", null)
 		return
 	error_code = String(login_result.get("error", ""))
 	rebuild()
+
+## ------------------------------------------------------------- облако
+
+## "free" — ник свободен; "mine" — занят, но пароль наш; "taken" — чужой;
+## "unknown" — облако не отвечает или не настроено (тогда просто создаём локально).
+func _cloud_verdict(nick: String, password: String) -> String:
+	var host := Store.relay_host()
+	if not P.is_cloud(host):
+		return "unknown"
+	# В проверках не трогаем настоящее облако — там живут ники живых людей.
+	if OS.get_environment("TNGRAM_PROFILE").strip_edges() != "":
+		return "unknown"
+	var tree := get_tree()
+	var state := { "done": false, "ok": false, "taken": false, "hash": "" }
+	Net.cloud_lookup_nick(host, Store.relay_key(), nick,
+		func(ok: bool, taken: bool, hash: String) -> void:
+			state["ok"] = ok
+			state["taken"] = taken
+			state["hash"] = hash
+			state["done"] = true)
+	var deadline := Time.get_ticks_msec() + 5000
+	while not bool(state["done"]) and Time.get_ticks_msec() < deadline:
+		await tree.process_frame
+		if not is_instance_valid(self):
+			return "unknown"
+	if not bool(state["ok"]):
+		return "unknown"
+	if not bool(state["taken"]):
+		return "free"
+	return "mine" if String(state["hash"]) == Store.hash_password(password) else "taken"
+
+func _claim_nick(nick: String, password: String) -> bool:
+	var tree := get_tree()
+	var state := { "done": false, "ok": false, "busy": false }
+	Net.cloud_claim_nick(Store.relay_host(), Store.relay_key(), nick, Store.hash_password(password),
+		func(ok: bool, busy: bool) -> void:
+			state["ok"] = ok
+			state["busy"] = busy
+			state["done"] = true)
+	var deadline := Time.get_ticks_msec() + 5000
+	while not bool(state["done"]) and Time.get_ticks_msec() < deadline:
+		await tree.process_frame
+		if not is_instance_valid(self):
+			return false
+	return bool(state["ok"]) and not bool(state["busy"])
+
+## Завести вход в облаке для нового ника. Возвращает { "verdict", "session" }:
+## "ok" — пропуск получен; "taken" — ник за другим человеком (пароль не подошёл);
+## "skip" — облака нет или оно не ответило: аккаунт всё равно создастся здесь.
+func _cloud_auth(nick: String, password: String) -> Dictionary:
+	if not P.is_cloud(Store.relay_host()):
+		return { "verdict": "skip", "session": {} }
+	if OS.get_environment("TNGRAM_PROFILE").strip_edges() != "":
+		return { "verdict": "skip", "session": {} }
+	var state := { "done": false, "ok": false, "reason": "", "session": {} }
+	Net.cloud_auth_signup(Store.relay_host(), Store.relay_key(), nick, password,
+		func(ok: bool, reason: String, session: Dictionary) -> void:
+			state["done"] = true
+			state["ok"] = ok
+			state["reason"] = reason
+			state["session"] = session)
+	await _await_state(state, 10000)
+	if bool(state["ok"]):
+		return { "verdict": "ok", "session": state["session"] }
+	# Ник на сервере уже есть. Если пароль наш — значит, это мы на другом устройстве.
+	if String(state["reason"]) == "user_already_exists":
+		var mine := { "done": false, "ok": false, "session": {} }
+		Net.cloud_auth_login(Store.relay_host(), Store.relay_key(), nick, password,
+			func(ok: bool, _reason: String, session: Dictionary) -> void:
+				mine["done"] = true
+				mine["ok"] = ok
+				mine["session"] = session)
+		await _await_state(mine, 10000)
+		if bool(mine["ok"]):
+			return { "verdict": "ok", "session": mine["session"] }
+		if bool(mine["done"]):
+			return { "verdict": "taken", "session": {} }
+	return { "verdict": "skip", "session": {} }
+
+## Ждать ответа сети, но не дольше отведённого срока
+func _await_state(state: Dictionary, ms: int) -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	var deadline := Time.get_ticks_msec() + ms
+	while not bool(state.get("done", false)) and Time.get_ticks_msec() < deadline:
+		await tree.process_frame
+		if not is_instance_valid(self):
+			return
 
 ## ------------------------------------------------------------- вспомогательное
 

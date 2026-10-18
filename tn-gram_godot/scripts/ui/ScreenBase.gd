@@ -125,9 +125,14 @@ func avatar(nick: String, size: int = 44) -> Control:
 	holder.custom_minimum_size = Vector2(size, size)
 	holder.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 
-	var circle := Panel.new()
+	# Круг рисуем крупной текстурой и уменьшаем: сглаженный край получается
+	# в любом графическом режиме, даже там, где MSAA не работает.
+	var circle := TextureRect.new()
+	circle.texture = UiStyle.circle_texture(p["a1"].lerp(p["a2"], 0.35), Color(1, 1, 1, 0.35), 128)
+	circle.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	circle.stretch_mode = TextureRect.STRETCH_SCALE
+	circle.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	circle.set_anchors_preset(Control.PRESET_FULL_RECT)
-	circle.add_theme_stylebox_override("panel", UiStyle.box(p["a1"].lerp(p["a2"], 0.35), size / 2, Color(1, 1, 1, 0.14), 1, 0))
 	circle.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	holder.add_child(circle)
 

@@ -41,6 +41,60 @@ const PALETTES := {
 static func palette(theme_id: String) -> Dictionary:
 	return PALETTES.get(theme_id, PALETTES["dark"])
 
+## ---------- сглаживание ----------
+
+## Размер текстуры свечения по уровню сглаживания: чем больше, тем мягче фон
+## (на градиенте не видно «ступенек»). 512 — уже 1 МБ на пятно, это нормально.
+static func glow_size(aa_level: int) -> int:
+	var sizes := [192, 256, 384, 512]
+	return int(sizes[clampi(aa_level, 0, 3)])
+
+## Шрифт нужного качества. Возвращает null, если встроенный шрифт поменять
+## не удалось, — тогда сглаживание текста просто остаётся заводским.
+static func aa_font(aa_level: int) -> Font:
+	var base: Font = ThemeDB.fallback_font
+	var file: FontFile = null
+	if base is FontFile:
+		file = (base as FontFile).duplicate() as FontFile
+	elif base is FontVariation and (base as FontVariation).base_font is FontFile:
+		file = ((base as FontVariation).base_font as FontFile).duplicate() as FontFile
+	if file == null:
+		return null
+	match clampi(aa_level, 0, 3):
+		0:
+			# без сглаживания: буквы резкие, «пиксельные»
+			file.antialiasing = TextServer.FONT_ANTIALIASING_NONE
+			file.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
+			file.hinting = TextServer.HINTING_NORMAL
+		1:
+			file.antialiasing = TextServer.FONT_ANTIALIASING_GRAY
+			file.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_AUTO
+			file.hinting = TextServer.HINTING_LIGHT
+		2:
+			file.antialiasing = TextServer.FONT_ANTIALIASING_GRAY
+			file.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_ONE_HALF
+			file.hinting = TextServer.HINTING_LIGHT
+		_:
+			# самый мягкий: тонкая подстройка положения букв
+			file.antialiasing = TextServer.FONT_ANTIALIASING_GRAY
+			file.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_ONE_QUARTER
+			file.hinting = TextServer.HINTING_NONE
+	return file
+
+## Умеет ли эта видеокарта сглаживать фигуры (MSAA)? В простом режиме
+## (OpenGL «Compatibility») — нет, там сглаживается только текст.
+static func shapes_aa_supported() -> bool:
+	return RenderingServer.get_rendering_device() != null
+
+## Насколько мягко сглаживать края фигур (панели, кружки-аватарки). В простом
+## графическом режиме MSAA не работает, зато этот параметр работает всегда:
+## чем выше уровень «Сглаживания» в настройках, тем мягче край.
+static var shape_softness := 1.0
+
+## Пересчитать мягкость краёв фигур по уровню сглаживания (0…3).
+static func apply_aa_level(aa_level: int) -> void:
+	shape_softness = 1.0 + float(clampi(aa_level, 0, 3)) * 0.5
+
 ## ---------- маленькие конструкторы стилей ----------
 
 ## Панель со скруглением и тонкой светлой обводкой
@@ -52,7 +106,27 @@ static func box(fill: Color, radius: int = 20, border: Color = Color(0, 0, 0, 0)
 	sb.border_color = border
 	sb.set_content_margin_all(pad)
 	sb.anti_aliasing = true
+	sb.anti_aliasing_size = shape_softness
 	return sb
+
+## Гладкий круг для аватарки. Рисуем крупную текстуру и уменьшаем её — край
+## получается мягким в любом графическом режиме (даже там, где MSAA не работает).
+## Текстуру не кэшируем: она живёт вместе с аватаркой и освобождается вместе с ней.
+static func circle_texture(fill: Color, rim: Color, size: int = 128) -> GradientTexture2D:
+	var gradient := Gradient.new()
+	gradient.set_color(0, fill)
+	gradient.set_color(1, rim)
+	# 0…0.90 — основной цвет, 0.90…0.955 — светлая обводка, 0.955…1 — плавный край
+	gradient.offsets = PackedFloat32Array([0.0, 0.90, 0.955, 1.0])
+	gradient.colors = PackedColorArray([fill, fill, rim, Color(rim.r, rim.g, rim.b, 0.0)])
+	var texture := GradientTexture2D.new()
+	texture.gradient = gradient
+	texture.width = size
+	texture.height = size
+	texture.fill = GradientTexture2D.FILL_RADIAL
+	texture.fill_from = Vector2(0.5, 0.5)
+	texture.fill_to = Vector2(0.5, 1.0)
+	return texture
 
 ## Заливка без скругления (фон окна)
 static func flat(fill: Color) -> StyleBoxFlat:
@@ -90,9 +164,14 @@ static func gradient_texture(from: Color, to: Color, size: Vector2i = Vector2i(2
 
 ## ---------- общая тема Control-узлов ----------
 
-static func build(theme_id: String) -> Theme:
+static func build(theme_id: String, aa_level: int = 1) -> Theme:
 	var p := palette(theme_id)
 	var theme := Theme.new()
+
+	# Сглаживание текста (см. aa_font). null — оставляем заводской шрифт.
+	var font := aa_font(aa_level)
+	if font != null:
+		theme.default_font = font
 
 	# Текст
 	theme.set_color("font_color", "Label", p["text"])
