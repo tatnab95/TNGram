@@ -217,6 +217,45 @@ func cloud_fetch_version(base_url: String, key: String, answer: Callable) -> voi
 		return
 	_queue_http("version", "GET", P.version_url(base), null, [], { "key": key, "cb": answer })
 
+## ------------------------------------------------------------------ кто в сети
+
+## Сказать облаку «я здесь». Строка одна на человека: время просто переписывается.
+## answer(ok) — получилось ли отметиться.
+func cloud_presence_ping(base_url: String, key: String, nick: String, answer: Callable) -> void:
+	var base := base_url.strip_edges().trim_suffix("/")
+	if base == "" or key.strip_edges() == "" or P.nick_key(nick) == "":
+		answer.call(false)
+		return
+	_queue_http("presence_ping", "POST", P.presence_url(base), [{
+		"nick_key": P.nick_key(nick),
+		"nick": nick.strip_edges(),
+		"last_seen": Time.get_datetime_string_from_system(true, true) + "+00"
+	}], ["Prefer: resolution=merge-duplicates,return=minimal"], { "key": key, "cb": answer })
+
+## Спросить про нескольких: answer(ok, { "ключ_ника": секунды })
+func cloud_presence_get(base_url: String, key: String, nicks: Array, answer: Callable) -> void:
+	var base := base_url.strip_edges().trim_suffix("/")
+	var keys: Array = []
+	for nick in nicks:
+		var text := P.nick_key(String(nick))
+		if text != "":
+			keys.append(text)
+	var url := P.presence_query_url(base, keys)
+	if base == "" or key.strip_edges() == "" or url == "":
+		answer.call(false, {})
+		return
+	_queue_http("presence_get", "GET", url, null, [], { "key": key, "cb": answer })
+
+## ------------------------------------------------------------------ новости
+
+## Новости приложения из облака. answer(ok, [ { "title", "body", "date" } ])
+func cloud_fetch_news(base_url: String, key: String, answer: Callable) -> void:
+	var base := base_url.strip_edges().trim_suffix("/")
+	if base == "" or key.strip_edges() == "":
+		answer.call(false, [])
+		return
+	_queue_http("news", "GET", P.news_url(base), null, [], { "key": key, "cb": answer })
+
 ## ------------------------------------------------------------------ вход в облако
 ## Ник превращается в служебный адрес (см. Protocol.auth_email) — почты у нас нет.
 ## Облако проверяет пароль и выдаёт пропуск; пропуск и есть доказательство, кто ты.
@@ -512,7 +551,8 @@ func _cloud_headers(extra: Array = [], key: String = "", plain: bool = false) ->
 		if auth_token.strip_edges() != "":
 			bearer = auth_token.strip_edges()
 		headers.append("Authorization: Bearer " + bearer)
-		headers.append("Content-Type: application/json")
+		# charset обязателен: без него облако портило кириллицу в никах
+		headers.append("Content-Type: application/json; charset=utf-8")
 		headers.append("Accept: application/json")
 	for line in extra:
 		headers.append(String(line))
@@ -558,6 +598,12 @@ func _on_http_completed(result: int, code: int, headers: PackedStringArray, body
 			callback.call(false, {})
 		elif tag == "text" and callback.is_valid():
 			callback.call(false, "")
+		elif tag == "presence_ping" and callback.is_valid():
+			callback.call(false)
+		elif tag == "presence_get" and callback.is_valid():
+			callback.call(false, {})
+		elif tag == "news" and callback.is_valid():
+			callback.call(false, [])
 		elif tag.begins_with("auth_") and callback.is_valid():
 			# Облако не ответило — вход продолжится по устройству (запасной путь)
 			callback.call(false, "net_error", {})
@@ -575,6 +621,13 @@ func _on_http_completed(result: int, code: int, headers: PackedStringArray, body
 			callback.call(false, {})
 		elif tag == "text" and callback.is_valid():
 			callback.call(false, "")
+		elif tag == "presence_ping" and callback.is_valid():
+			callback.call(false)
+		elif tag == "presence_get" and callback.is_valid():
+			callback.call(false, {})
+		elif tag == "news" and callback.is_valid():
+			# Таблицы новостей может ещё не быть — покажем только «Что нового»
+			callback.call(false, [])
 		elif tag.begins_with("auth_") and callback.is_valid():
 			# 400 — не тот пароль или ник занят; причина приходит словами
 			callback.call(false, P.parse_auth_error(text), {})
@@ -598,6 +651,17 @@ func _on_http_completed(result: int, code: int, headers: PackedStringArray, body
 		"nick_claim":
 			if callback.is_valid():
 				callback.call(true, false)
+		"presence_ping":
+			if callback.is_valid():
+				callback.call(true)
+		"presence_get":
+			var seen := P.parse_presence(text)
+			if callback.is_valid():
+				callback.call(true, seen)
+		"news":
+			var items := P.parse_news(text)
+			if callback.is_valid():
+				callback.call(true, items)
 		"auth_signup", "auth_login", "auth_refresh":
 			if callback.is_valid():
 				callback.call(true, "", P.parse_session(text))

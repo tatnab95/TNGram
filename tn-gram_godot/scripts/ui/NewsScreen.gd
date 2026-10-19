@@ -2,10 +2,28 @@ extends ScreenBase
 ## Экран «Что нового»: что изменилось в каждой версии, и предложение обновиться,
 ## если на сайте лежит версия новее нашей.
 
-const P := preload("res://scripts/net/Protocol.gd")
+var server_news: Array = []      ## новости из облака
+var news_asked := false          ## уже спрашивали облако в этот раз
 
 func _ready() -> void:
 	build()
+	fetch_news()
+
+## Спросить у облака новости разработчика. Без связи просто ничего не делаем.
+func fetch_news() -> void:
+	if news_asked or Store.current_nick == "":
+		return
+	if OS.get_environment("TNGRAM_PROFILE").strip_edges() != "":
+		return
+	if not P.is_cloud(Store.relay_host()):
+		return
+	news_asked = true
+	Net.cloud_fetch_news(Store.relay_host(), Store.relay_key(), func(ok: bool, items: Array) -> void:
+		if not is_inside_tree():
+			return
+		if ok and not items.is_empty():
+			server_news = items
+			rebuild())
 
 func rebuild() -> void:
 	for child in get_children():
@@ -36,6 +54,9 @@ func build() -> void:
 	head.add_child(hint(Loc.t("news_subtitle"), 13))
 	column.add_child(head)
 
+	# --- новости от разработчика (из облака) ---
+	column.add_child(server_news_block())
+
 	var scroller := scroll()
 	var list := vbox(10)
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -62,6 +83,46 @@ func build() -> void:
 	# --- что нового по версиям ---
 	for entry in P.changelog(Loc.lang):
 		list.add_child(version_card(entry))
+
+## Блок новостей из облака: заголовок и карточки. Если новостей нет или связи
+## нет — просто подсказка, ничего не ломается.
+func server_news_block() -> Control:
+	var block := vbox(8)
+	block.add_child(label(Loc.t("news_from_server"), 16, pal()["a2"]))
+	if server_news.is_empty():
+		block.add_child(hint(Loc.t("news_empty") if news_asked else Loc.t("news_no_connection"), 13))
+		return block
+	for item in server_news:
+		block.add_child(news_card(item as Dictionary))
+	return block
+
+## Карточка одной новости: заголовок, текст и дата
+func news_card(item: Dictionary) -> PanelContainer:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", UiStyle.box(pal()["panel"], 18, pal()["line"], 1, 16))
+	var box := vbox(6)
+	var title := String(item.get("title", "")).strip_edges()
+	var body := String(item.get("body", "")).strip_edges()
+	if title != "":
+		card.add_theme_stylebox_override("panel", UiStyle.box(pal()["panel"], 18, pal()["a2"], 1, 16))
+		box.add_child(label(title, 16, pal()["a2"]))
+	if body != "":
+		box.add_child(label(body, 14, pal()["text"], true))
+	var date := short_date(String(item.get("date", "")))
+	if date != "":
+		box.add_child(hint(date, 12))
+	card.add_child(box)
+	return card
+
+## «2026-10-18T12:34:56+00:00» → «18.10.2026» (пусто — не показываем дату)
+func short_date(value: String) -> String:
+	var text := value.strip_edges()
+	if text.length() < 10:
+		return ""
+	var day := text.substr(0, 10).split("-")
+	if day.size() != 3:
+		return ""
+	return "%s.%s.%s" % [String(day[2]), String(day[1]), String(day[0])]
 
 ## Карточка одной версии: номер, дата и список изменений
 func version_card(entry: Dictionary) -> PanelContainer:

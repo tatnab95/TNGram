@@ -20,11 +20,21 @@ static func available() -> bool:
 	return OS.has_feature("windows") and DisplayServer.get_name() != "headless"
 
 ## Код PowerShell для показа уведомления. Заголовок и текст — уже подготовлены.
-static func build_script(title: String, body: String) -> String:
+## icon — путь к иконке приложения (пустая строка — не трогаем).
+static func build_script(title: String, body: String, icon: String = "") -> String:
 	var t := _quote(title)
 	var b := _quote(body)
+	var i := _quote(icon)
+	# Шаг 1 — имя приложения в реестре пользователя (отдельный try, чтобы перебои
+	# с реестром не отменили саму всплывашку), Шаг 2 — показ уведомления.
 	return (
-		"$ErrorActionPreference = 'Stop';"
+		"$aid = 'TNGram.Notifier';"
+		+ "$key = 'HKCU:\\Software\\Classes\\AppUserModelId\\' + $aid;"
+		+ "try { if (-not (Test-Path $key)) { New-Item $key -Force | Out-Null };"
+		+ "New-ItemProperty $key -Name 'DisplayName' -Value 'TNGram' -PropertyType String -Force | Out-Null;"
+		+ "if (%s) { New-ItemProperty $key -Name 'IconUri' -Value %s -PropertyType String -Force | Out-Null; } } catch { }" % [i, i]
+		# Шаг 2: сама всплывашка.
+		+ "$ErrorActionPreference = 'Stop';"
 		+ "try {"
 		+ "[void][Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime];"
 		+ "[void][Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime];"
@@ -34,8 +44,9 @@ static func build_script(title: String, body: String) -> String:
 		+ "[void]$nodes.Item(0).AppendChild($xml.CreateTextNode(%s));" % t
 		+ "[void]$nodes.Item(1).AppendChild($xml.CreateTextNode(%s));" % b
 		+ "$toast = [Windows.UI.Notifications.ToastNotification]::new($xml);"
-		+ "$appId = '{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe';"
-		+ "$manager::CreateToastNotifier($appId).Show($toast);"
+		+ "$toast.Tag = 'TNGram';"
+		+ "$toast.Group = 'TNGram';"
+		+ "$manager::CreateToastNotifier($aid).Show($toast);"
 		+ "} catch { }"
 	)
 
@@ -44,12 +55,14 @@ static func build_script(title: String, body: String) -> String:
 static func toast(title: String, body: String) -> bool:
 	if not available():
 		return false
-	var script := build_script(_clean(title, MAX_TITLE), _clean(body, MAX_BODY))
-	OS.create_process("powershell.exe", [
+	var script := build_script(_clean(title, MAX_TITLE), _clean(body, MAX_BODY), OS.get_executable_path())
+	# Если Windows не приняла команду (нет PowerShell, запрет запуска) —
+	# честно отвечаем false, тогда приложение покажет карточку само.
+	var error := OS.create_process("powershell.exe", [
 		"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
 		"-WindowStyle", "Hidden", "-EncodedCommand", _encode_command(script),
 	])
-	return true
+	return error == OK
 
 ## Строка в кавычках для PowerShell: одинарная кавычка внутри удваивается.
 static func _quote(text: String) -> String:

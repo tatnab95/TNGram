@@ -10,6 +10,7 @@ const DEFAULT_SAVE_PATH := "user://tngram_data.json"
 const DEFAULT_ACCOUNTS := ["админ", "админ2"]
 
 signal data_changed  ## данные изменились — надо перерисовать экраны
+signal presence_changed  ## кто-то появился в сети — обновить зелёные точки
 
 var save_path := DEFAULT_SAVE_PATH  ## где лежат данные (см. профиль ниже)
 var accounts: Array = []        ## [{ "nick": String, "pass_hash": String, "created": int }]
@@ -19,6 +20,10 @@ var current_nick := ""          ## кто сейчас вошёл; пустая 
 
 ## Непрочитанные: { "владелец": { "собеседник": сколько } }
 var unread: Dictionary = {}
+## Группы: { "владелец": { "адрес_группы": { "title", "members", "created" } } }
+var groups: Dictionary = {}
+## Кто в сети (только в памяти): { "ключ_ника": когда_видели }
+var peer_seen: Dictionary = {}
 ## Правда, если наш ник занят ещё кем-то (облако сказало или пришло сообщение
 ## от собеседника с нашим же ником). Тогда в списке чатов видно предупреждение.
 var nick_conflict := false
@@ -98,6 +103,7 @@ func login(nick: String, password: String) -> Dictionary:
 		return { "ok": false, "error": "err_pass_wrong" }
 	current_nick = String(acc["nick"])
 	nick_conflict = false
+	peer_seen.clear()
 	settings["last_nick"] = current_nick
 	save_data()
 	emit_signal("data_changed")
@@ -106,6 +112,7 @@ func login(nick: String, password: String) -> Dictionary:
 func logout() -> void:
 	current_nick = ""
 	nick_conflict = false
+	peer_seen.clear()
 	emit_signal("data_changed")
 
 func current_account() -> Dictionary:
@@ -182,6 +189,8 @@ func delete_account(nick: String) -> void:
 	accounts.erase(acc)
 	chats.erase(String(acc["nick"]))
 	unread.erase(String(acc["nick"]))
+	groups.erase(String(acc["nick"]))
+	peer_seen.clear()
 	if current_nick == String(acc["nick"]):
 		current_nick = ""
 		nick_conflict = false
@@ -203,6 +212,11 @@ func contacts() -> Array:
 	if chats.has(current_nick):
 		for peer in chats[current_nick].keys():
 			var name := String(peer)
+			# Группа живёт отдельной карточкой (см. chat_keys). Если пропустить
+			# эту проверку, группа появляется в списке дважды: как группа и как
+			# «человек» с ником вида g:дачники_админ.
+			if P.is_group_key(name):
+				continue
 			if seen.has(P.nick_key(name)):
 				continue
 			# Собеседник с моим собственным ником — это чужая ошибка: ник занят
@@ -269,7 +283,7 @@ func receive_message(from_nick: String, text: String, ts: int = 0, net_id: Strin
 		for message in list:
 			if String(message.get("id", "")) == net_id:
 				return true  # уже было — но подтвердить получение всё равно нужно
-	list.append({
+	_insert_sorted(list, {
 		"text": text,
 		"ts": ts if ts > 0 else int(Time.get_unix_time_from_system()),
 		"mine": false,
@@ -304,6 +318,274 @@ func ensure_contact(peer: String) -> bool:
 		save_data()
 		emit_signal("data_changed")
 	return true
+
+## ------------------------------------------------------------------ группы
+
+## Чат — это группа? (адрес начинается с «g:» и группа нам известна)
+func is_group(key: String) -> bool:
+	if not P.is_group_key(key):
+		return false
+	if not groups.has(current_nick):
+		return false
+	return (groups[current_nick] as Dictionary).has(key)
+
+func group_info(key: String) -> Dictionary:
+	if not groups.has(current_nick):
+		return {}
+	var own: Dictionary = groups[current_nick]
+	return own.get(key, {})
+
+func group_title(key: String) -> String:
+	var info := group_info(key)
+	var title := String(info.get("title", "")).strip_edges()
+	return title if title != "" else key
+
+## Полный состав группы: создатель, все участники и я сам. Именно этот список
+## едет в шапке сообщения, поэтому у каждого участника группа выглядит одинаково
+## и ответ доходит до всех — до создателя тоже.
+func group_roster(key: String) -> Array:
+	var info := group_info(key)
+	var full: Array = []
+	var owner_nick := String(info.get("owner", "")).strip_edges()
+	if owner_nick != "" and not _has_nick(full, owner_nick):
+		full.append(owner_nick)
+	var stored: Variant = info.get("members", [])
+	if typeof(stored) == TYPE_ARRAY:
+		for member in (stored as Array):
+			var nick := String(member).strip_edges()
+			if nick != "" and not _has_nick(full, nick):
+				full.append(nick)
+	if current_nick != "" and not _has_nick(full, current_nick):
+		full.append(current_nick)
+	return full
+
+## Состав группы без меня самого — это те, кому уходит сообщение.
+func group_members(key: String) -> Array:
+	var roster: Array = []
+	for nick in group_roster(key):
+		if not _same_nick(nick, current_nick):
+			roster.append(nick)
+	return roster
+
+## Все группы этого человека, свежие сверху
+func group_list() -> Array:
+	if not groups.has(current_nick):
+		return []
+	var keys: Array = []
+	for key in (groups[current_nick] as Dictionary).keys():
+		keys.append({ "key": String(key), "ts": _last_ts(String(key)) })
+	keys.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a["ts"]) > int(b["ts"]))
+	var list: Array = []
+	for item in keys:
+		list.append(String(item["key"]))
+	return list
+
+## Собрать группу: название и список людей. Возвращает { ok, error, key }.
+func create_group(title: String, members: Array) -> Dictionary:
+	title = title.strip_edges()
+	if current_nick == "":
+		return { "ok": false, "error": "err_no_account" }
+	if title.length() < 2:
+		return { "ok": false, "error": "err_group_title" }
+	var roster: Array = []
+	for member in members:
+		var nick := String(member).strip_edges()
+		if nick == "" or _same_nick(nick, current_nick) or _has_nick(roster, nick):
+			continue
+		roster.append(nick)
+	if roster.is_empty():
+		return { "ok": false, "error": "err_group_members" }
+	if roster.size() > P.GROUP_MAX_MEMBERS:
+		roster = roster.slice(0, P.GROUP_MAX_MEMBERS)
+	title = title.substr(0, P.GROUP_TITLE_MAX)
+	var key := P.group_key(title, current_nick)
+	if not groups.has(current_nick):
+		groups[current_nick] = {}
+	(groups[current_nick] as Dictionary)[key] = {
+		"title": title,
+		# Полный состав, включая создателя: иначе у остальных участников
+		# создатель пропадёт из списка и его ответ до них не дойдёт.
+		"members": _unique_nicks([current_nick] + roster),
+		"owner": current_nick,
+		"created": int(Time.get_unix_time_from_system())
+	}
+	if not chats.has(current_nick):
+		chats[current_nick] = {}
+	if not (chats[current_nick] as Dictionary).has(key):
+		(chats[current_nick] as Dictionary)[key] = []
+	save_data()
+	emit_signal("data_changed")
+	return { "ok": true, "error": "", "key": key }
+
+## Завести чужую группу у себя: она пришла вместе с первым сообщением.
+## Возвращает true, если группу создали или состав обновился.
+## Завести у себя группу из чужого письма (или обновить её состав).
+## owner_nick — создатель из шапки; sender_nick — кто написал письмо: в старых
+## письмах создатель в шапке не едет, но отправитель точно должен быть в составе,
+## иначе ответы до него не дойдут.
+func adopt_group(key: String, title: String, members: Array, owner_nick: String = "",
+		sender_nick: String = "") -> bool:
+	if current_nick == "" or not P.is_group_key(key):
+		return false
+	if not groups.has(current_nick):
+		groups[current_nick] = {}
+	var own: Dictionary = groups[current_nick]
+	var known: Dictionary = own.get(key, {})
+	var known_members: Variant = known.get("members", [])
+	var roster: Array = _unique_nicks(known_members) if typeof(known_members) == TYPE_ARRAY else []
+	var fresh := false
+	for member in members:
+		var nick := String(member).strip_edges()
+		if nick == "" or _same_nick(nick, current_nick) or _has_nick(roster, nick):
+			continue
+		roster.append(nick)
+		fresh = true
+	var clean_title := title.strip_edges()
+	if clean_title == "":
+		clean_title = String(known.get("title", "")).strip_edges()
+	if clean_title == "":
+		clean_title = key
+	# Создатель группы — участник наравне со всеми
+	var owner := String(known.get("owner", "")).strip_edges()
+	if owner == "":
+		owner = owner_nick.strip_edges()
+	if owner != "" and not _same_nick(owner, current_nick) and not _has_nick(roster, owner):
+		roster.append(owner)
+		fresh = true
+	# Отправитель письма — тоже участник, даже если шапка старая и без создателя
+	var sender := sender_nick.strip_edges()
+	if sender != "" and not _same_nick(sender, current_nick) and not _has_nick(roster, sender):
+		roster.append(sender)
+		fresh = true
+	if known.is_empty() or fresh or String(known.get("title", "")) != clean_title \
+			or String(known.get("owner", "")) != owner:
+		own[key] = {
+			"title": clean_title.substr(0, P.GROUP_TITLE_MAX),
+			"members": roster,
+			"owner": owner,
+			"created": int(known.get("created", Time.get_unix_time_from_system()))
+		}
+		save_data()
+		return true
+	return false
+
+## Написать в группу. Сообщение сохраняется у себя и уходит всем участникам
+## (рассылку делает Main — здесь только запись).
+func send_group_message(key: String, text: String) -> bool:
+	text = text.strip_edges()
+	if text == "" or current_nick == "" or not is_group(key):
+		return false
+	if not chats.has(current_nick):
+		chats[current_nick] = {}
+	var own: Dictionary = chats[current_nick]
+	if not own.has(key):
+		own[key] = []
+	(own[key] as Array).append({
+		"text": text,
+		"ts": int(Time.get_unix_time_from_system()),
+		"mine": true,
+		"from": current_nick
+	})
+	save_data()
+	emit_signal("data_changed")
+	return true
+
+## Сообщение из группы: заводим группу (если впервые слышим) и записываем текст.
+## owner_nick — создатель группы из шапки сообщения (в старых сообщениях его нет).
+func receive_group_message(from_nick: String, key: String, title: String, members: Array,
+		text: String, ts: int = 0, net_id: String = "", owner_nick: String = "") -> bool:
+	text = text.strip_edges()
+	if text == "" or current_nick == "" or not P.is_group_key(key) or from_nick.strip_edges() == "":
+		return false
+	adopt_group(key, title, members, owner_nick, from_nick)
+	if not chats.has(current_nick):
+		chats[current_nick] = {}
+	var own: Dictionary = chats[current_nick]
+	if not own.has(key):
+		own[key] = []
+	var list: Array = own[key]
+	if net_id != "":
+		for message in list:
+			if String(message.get("id", "")) == net_id:
+				return true
+	_insert_sorted(list, {
+		"text": text,
+		"ts": ts if ts > 0 else int(Time.get_unix_time_from_system()),
+		"mine": false,
+		"from": from_nick,
+		"id": net_id
+	})
+	bump_unread(key)
+	save_data()
+	emit_signal("data_changed")
+	return true
+
+## Красивое имя собеседника: группы — название, люди — ник из аккаунта,
+## если он у нас есть, иначе то написание, каким записан чат.
+func peer_title(key: String) -> String:
+	if is_group(key):
+		return group_title(key)
+	for acc in accounts:
+		if _same_nick(String(acc.get("nick", "")), key):
+			return String(acc.get("nick", ""))
+	return key
+
+## Разговор: человек это или группа. Так список чатов показывает и то, и другое.
+func chat_keys() -> Array:
+	var list: Array = []
+	for key in group_list():
+		list.append({ "key": key, "group": true, "ts": _last_ts(key) })
+	for peer in contacts():
+		list.append({ "key": peer, "group": false, "ts": _last_ts(peer) })
+	list.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a["ts"]) > int(b["ts"]))
+	return list
+
+## ------------------------------------------------------------------ кто в сети
+
+## Отметить, что человека видели в сети (время — секунды, как у всех).
+func note_seen(nick: String, ts: int) -> void:
+	var key := P.nick_key(nick)
+	if key == "":
+		return
+	var before := int(peer_seen.get(key, 0))
+	peer_seen[key] = maxi(ts, 1)
+	if before != peer_seen[key]:
+		emit_signal("presence_changed")
+
+## Применить ответ облака: { "ключ_ника": время }
+func apply_presence(found: Dictionary) -> void:
+	var changed := false
+	for key in found.keys():
+		var stamp := int(found[key])
+		if int(peer_seen.get(String(key), 0)) != stamp:
+			changed = true
+		peer_seen[String(key)] = stamp
+	if changed:
+		emit_signal("presence_changed")
+
+## Когда человека видели в последний раз (0 — не знаем)
+func seen_at(nick: String) -> int:
+	return int(peer_seen.get(P.nick_key(nick), 0))
+
+## Считается ли человек сейчас в сети
+func is_online(nick: String) -> bool:
+	var seen := seen_at(nick)
+	if seen <= 0:
+		return false
+	return int(Time.get_unix_time_from_system()) - seen <= P.PRESENCE_ONLINE_SEC
+
+## Про кого спрашивать облако: собеседники, участники групп и открытый чат
+func presence_keys() -> Array:
+	var keys: Array = []
+	for peer in contacts():
+		keys.append(P.nick_key(peer))
+	for key in group_list():
+		for member in group_members(key):
+			if not keys.has(P.nick_key(member)):
+				keys.append(P.nick_key(member))
+	return keys
 
 ## ------------------------------------------------------------------ непрочитанные
 
@@ -360,6 +642,224 @@ func _messages_of(owner_nick: String, peer: String) -> Array:
 	var own: Dictionary = chats[owner_nick]
 	var key := _peer_key(own, peer)
 	return own.get(key, []) if own.has(key) else []
+
+## Когда в этом чате было последнее сообщение (0 — сообщений нет)
+func _last_ts(key: String) -> int:
+	var list := messages(key)
+	if list.is_empty():
+		return 0
+	return int((list[list.size() - 1] as Dictionary).get("ts", 0))
+
+## Есть ли такой ник в списке (регистр букв не важен)
+func _has_nick(list: Array, nick: String) -> bool:
+	for item in list:
+		if _same_nick(String(item), nick):
+			return true
+	return false
+
+## Убрать повторы одного и того же ника (регистр букв не важен)
+func _unique_nicks(list: Array) -> Array:
+	var out: Array = []
+	for item in list:
+		var nick := String(item).strip_edges()
+		if nick != "" and not _has_nick(out, nick):
+			out.append(nick)
+	return out
+
+## Вставить сообщение по времени: старые сверху. Так даже при разнице часов
+## на устройствах переписка не перепутывается.
+func _insert_sorted(list: Array, message: Dictionary) -> void:
+	var stamp := int(message.get("ts", 0))
+	var at := list.size()
+	for i in list.size():
+		if int((list[i] as Dictionary).get("ts", 0)) > stamp:
+			at = i
+			break
+	list.insert(at, message)
+
+## ------------------------------------------------------------------ чистка
+
+## Привести данные к одному виду: один аккаунт на ник, один чат на собеседника,
+## один карман непрочитанных. «Клоны» (тот же ник в другом регистре, дубли от
+## старых версий) склеиваются — переписка при этом не теряется, а складывается
+## и выставляется по времени. Вызывается при загрузке файла данных.
+func _normalize_data() -> void:
+	accounts = _merge_accounts(accounts)
+	var canon: Dictionary = {}  # ключ ника -> лучшее написание
+	for acc in accounts:
+		canon[P.nick_key(String(acc.get("nick", "")))] = String(acc.get("nick", "")).strip_edges()
+	# Владельцы чатов и групп: любое написание ника сводим к одному
+	for map in [chats, groups, unread]:
+		for owner in map.keys():
+			var key := P.nick_key(String(owner))
+			if key != "" and not canon.has(key):
+				canon[key] = String(owner).strip_edges()
+	chats = _merge_owner_map(chats, canon, "messages")
+	unread = _merge_owner_map(unread, canon, "numbers")
+	groups = _merge_owner_map(groups, canon, "dicts")
+	# У группы создатель должен быть среди участников — иначе его ответы
+	# до остальных не дойдут (старые группы собирались без него)
+	for owner in groups.keys():
+		var own: Dictionary = groups[owner]
+		for key in own.keys():
+			_ensure_owner_member(own[key])
+
+## Склеить аккаунты с одинаковым ником. Оставляем лучший: с паролем и пропуском
+func _merge_accounts(list: Array) -> Array:
+	var out: Array = []
+	var index: Dictionary = {}
+	for acc in list:
+		if typeof(acc) != TYPE_DICTIONARY:
+			continue
+		var nick := String(acc.get("nick", "")).strip_edges()
+		var key := P.nick_key(nick)
+		if key == "":
+			continue
+		if not index.has(key):
+			index[key] = out.size()
+			out.append(acc)
+			continue
+		var keep: Dictionary = out[index[key]]
+		if String(keep.get("pass_hash", "")) == "" and String(acc.get("pass_hash", "")) != "":
+			keep["pass_hash"] = acc["pass_hash"]
+		if keep.get("auth", null) == null and acc.get("auth", null) != null:
+			keep["auth"] = acc["auth"]
+	return out
+
+## Склеить словарь «владелец → собеседник → …». Владельца берём по ключу ника,
+## а все написания одного собеседника сливаем в один карман: сообщения — в один
+## список по времени, числа непрочитанных — суммой, словари групп — полем за
+## полем. Оставляется только одно, «лучшее» написание — иначе при сохранении
+## один и тот же список уехал бы в файл под двумя ключами и размножался.
+func _merge_owner_map(source: Dictionary, canon: Dictionary, kind: String) -> Dictionary:
+	# Шаг 1: складываем записи в общие карманы «владелец → ключ ника собеседника»
+	var buckets: Dictionary = {}    # владелец -> { ключ ника -> [ { "peer", "value" } ] }
+	var owner_order: Array = []     # порядок владельцев, как встретились
+	var peer_order: Dictionary = {} # владелец -> [ ключ ника собеседника ]
+	for owner in source.keys():
+		var raw: Variant = source[owner]
+		if typeof(raw) != TYPE_DICTIONARY:
+			continue
+		var owner_key := P.nick_key(String(owner))
+		var owner_name := String(canon.get(owner_key, String(owner).strip_edges()))
+		if not buckets.has(owner_name):
+			buckets[owner_name] = {}
+			peer_order[owner_name] = []
+			owner_order.append(owner_name)
+		var mine: Dictionary = buckets[owner_name]
+		for peer in (raw as Dictionary).keys():
+			var clean := String(peer).strip_edges()
+			var wanted := P.nick_key(clean)
+			if wanted == "":
+				continue
+			if not mine.has(wanted):
+				mine[wanted] = []
+				(peer_order[owner_name] as Array).append(wanted)
+			# Копию кладём: склеенный список не должен оставаться тем же
+			# объектом, что и прежние списки-дубликаты.
+			var stored: Variant = (raw as Dictionary)[peer]
+			var piece: Variant = stored
+			if typeof(stored) == TYPE_ARRAY or typeof(stored) == TYPE_DICTIONARY:
+				piece = stored.duplicate()
+			(mine[wanted] as Array).append({ "peer": clean, "value": piece })
+	# Шаг 2: содержимое каждого кармана сводим в одно
+	var out: Dictionary = {}
+	for owner_name in owner_order:
+		var target: Dictionary = {}
+		out[owner_name] = target
+		var keys: Array = peer_order[owner_name]
+		var merged: Dictionary = {}  # ключ ника -> { "peer", "value" }
+		for wanted in keys:
+			var entries: Array = (buckets[owner_name] as Dictionary)[wanted]
+			var value: Variant = _merge_slot(entries, kind)
+			if kind == "dicts":
+				_ensure_owner_member(value)
+			merged[wanted] = { "peer": _slot_name(entries, kind), "value": value }
+		for wanted in keys:
+			var item: Dictionary = merged[wanted]
+			target[String(item["peer"])] = item["value"]
+	return out
+
+## Содержимое одного склеенного кармана
+func _merge_slot(entries: Array, kind: String) -> Variant:
+	if kind == "numbers":
+		var sum := 0
+		for entry in entries:
+			sum += _slot_number((entry as Dictionary)["value"])
+		return sum
+	if kind == "dicts":
+		var merged: Dictionary = {}
+		for entry in entries:
+			var payload: Variant = (entry as Dictionary)["value"]
+			if typeof(payload) != TYPE_DICTIONARY:
+				continue
+			for field in (payload as Dictionary).keys():
+				# Список участников копируем — он у склеенных карманов свой
+				var piece: Variant = payload[field]
+				merged[field] = piece.duplicate() if typeof(piece) == TYPE_ARRAY else piece
+		return merged
+	var list: Array = []
+	for entry in entries:
+		var payload: Variant = (entry as Dictionary)["value"]
+		if typeof(payload) != TYPE_ARRAY:
+			continue
+		for message in (payload as Array):
+			if typeof(message) == TYPE_DICTIONARY:
+				# Копию словаря берём: сообщение не должно зависеть от того,
+				# какой карман склеивали первым.
+				list.append((message as Dictionary).duplicate())
+	return _sorted_messages(list)
+
+## Какое написание ника оставить у склеенного кармана
+func _slot_name(entries: Array, kind: String) -> String:
+	# У группы оставляем сам адрес (g:…) — он у всех участников одинаковый
+	if kind == "dicts":
+		return String((entries[0] as Dictionary)["peer"])
+	var best := String((entries[0] as Dictionary)["peer"])
+	var best_value := _slot_number((entries[0] as Dictionary)["value"])
+	for entry in entries:
+		var name := String((entry as Dictionary)["peer"])
+		var value := _slot_number((entry as Dictionary)["value"])
+		# У переписки берём то написание, где писем больше; у счётчика — короткое
+		if (kind == "messages" and value > best_value) \
+				or (kind == "numbers" and name.length() < best.length()):
+			best = name
+			best_value = value
+	return best
+
+## Сколько «единиц» в кармане: сообщений или непрочитанных
+func _slot_number(value: Variant) -> int:
+	if typeof(value) == TYPE_ARRAY:
+		return (value as Array).size()
+	if typeof(value) == TYPE_INT or typeof(value) == TYPE_FLOAT:
+		return int(value)
+	return 0
+
+## Сообщения по времени: старые сверху. Порядок при равных метках сохраняем.
+func _sorted_messages(list: Array) -> Array:
+	var indexed: Array = []
+	for i in list.size():
+		if typeof(list[i]) == TYPE_DICTIONARY:
+			indexed.append({ "i": i, "m": list[i] })
+	indexed.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var ta := int((a["m"] as Dictionary).get("ts", 0))
+		var tb := int((b["m"] as Dictionary).get("ts", 0))
+		return (ta < tb) if ta != tb else int(a["i"]) < int(b["i"]))
+	var out: Array = []
+	for item in indexed:
+		out.append((item as Dictionary)["m"])
+	return out
+
+## Добавить создателя в состав группы, если его там нет
+func _ensure_owner_member(info: Dictionary) -> void:
+	if typeof(info) != TYPE_DICTIONARY:
+		return
+	var stored: Variant = info.get("members", [])
+	var roster: Array = _unique_nicks(stored) if typeof(stored) == TYPE_ARRAY else []
+	var owner_nick := String(info.get("owner", "")).strip_edges()
+	if owner_nick != "" and not _has_nick(roster, owner_nick):
+		roster = [owner_nick] + roster
+	info["members"] = roster
 
 ## ------------------------------------------------------------------ настройки
 
@@ -441,10 +941,27 @@ func set_remote_version(value: String) -> void:
 	settings["remote_version"] = value.strip_edges()
 	save_data()
 
+## Версия, о которой человеку уже сказали (чтобы не показывать одно и то же дважды)
+func last_seen_version() -> String:
+	return String(settings.get("update_seen", "")).strip_edges()
+
+func set_last_seen_version(value: String) -> void:
+	settings["update_seen"] = value.strip_edges()
+	save_data()
+
 ## Вышла ли новая версия? Возвращает её номер или пустую строку.
 func update_available() -> String:
 	var remote := remote_version()
 	return remote if remote != "" and P.version_compare(remote, P.APP_VERSION) > 0 else ""
+
+## Куда ведёт кнопка «Обновить»: ссылка из облака, иначе адрес сайта.
+func update_url() -> String:
+	var url := String(settings.get("update_url", "")).strip_edges()
+	return url if url != "" else site_url()
+
+func set_update_url(url: String) -> void:
+	settings["update_url"] = url.strip_edges()
+	save_data()
 
 ## ------------------------------------------------------------------ связь
 
@@ -494,6 +1011,7 @@ func save_data() -> void:
 	file.store_string(JSON.stringify({
 		"accounts": accounts,
 		"chats": chats,
+		"groups": groups,
 		"settings": settings,
 		"unread": unread
 	}, "\t"))
@@ -516,6 +1034,12 @@ func load_data() -> void:
 	settings = data.get("settings", {})
 	var loaded_unread: Variant = data.get("unread", {})
 	unread = loaded_unread if typeof(loaded_unread) == TYPE_DICTIONARY else {}
+	var loaded_groups: Variant = data.get("groups", {})
+	groups = loaded_groups if typeof(loaded_groups) == TYPE_DICTIONARY else {}
+	# Склеиваем клоны (один ник в разных регистрах, дубли старых версий) и
+	# расставляем переписку по времени — сразу, чтобы чистка была заметна.
+	_normalize_data()
+	save_data()
 
 ## ------------------------------------------------------------------ мелочи
 

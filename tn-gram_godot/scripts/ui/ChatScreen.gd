@@ -7,16 +7,24 @@ var scroller: ScrollContainer
 var input: LineEdit
 var note_label: Label
 var ping_label: Label
+var status_label: Label  ## «в сети» / «был(а) 5 мин назад» / «участников: 3»
 
 func _ready() -> void:
 	Store.mark_read(peer)
 	build()
 	if not Store.data_changed.is_connected(_on_data_changed):
 		Store.data_changed.connect(_on_data_changed)
+	if not Store.presence_changed.is_connected(_on_presence_changed):
+		Store.presence_changed.connect(_on_presence_changed)
 	if not Net.changed.is_connected(net_changed):
 		Net.changed.connect(net_changed)
 	await get_tree().process_frame
 	scroll_to_bottom()
+
+## Кто-то появился в сети — меняем только подпись, печатать не мешаем
+func _on_presence_changed() -> void:
+	if status_label != null and is_instance_valid(status_label):
+		status_label.text = _status_line()
 
 func _on_data_changed() -> void:
 	if not is_inside_tree():
@@ -31,12 +39,24 @@ func _on_data_changed() -> void:
 	await get_tree().process_frame
 	scroll_to_bottom()
 
-## Состояние связи изменилось — обновляем только подпись, не трогая ввод
+## Состояние связи изменилось — обновляем только подписи, не трогая ввод
 func net_changed() -> void:
 	if note_label != null and is_instance_valid(note_label):
 		note_label.text = _note_text()
 	if ping_label != null and is_instance_valid(ping_label):
 		ping_label.text = _ping_text()
+	if status_label != null and is_instance_valid(status_label):
+		status_label.text = _status_line()
+
+## Название чата: для группы — её имя, для человека — ник
+func title_text() -> String:
+	return Store.peer_title(peer)
+
+## Вторая строка в шапке: у группы — сколько людей, у человека — «в сети» или «был(а)…»
+func _status_line() -> String:
+	if Store.is_group(peer):
+		return Loc.tf("group_members_count", [str(Store.group_roster(peer).size())])
+	return status_text(peer)
 
 func _note_text() -> String:
 	return Loc.t("net_note_online") if Net.is_online() else Loc.t("net_note_offline")
@@ -83,18 +103,21 @@ func build() -> void:
 	var column := vbox(14)
 	margin.add_child(column)
 
-	# --- верхняя строка ---
+	# --- верхняя строка: имя чата, «в сети» и отклик сервера ---
+	var group := Store.is_group(peer)
 	var top := hbox(12)
 	top.add_child(ghost_button(Loc.t("back"), func() -> void:
 		navigate.emit("chats", null)))
-	top.add_child(avatar(peer, 38))
-	var title := label(peer, 17)
-	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	top.add_child(title)
-	ping_label = label(_ping_text(), 12, pal()["muted"])
-	ping_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	top.add_child(ping_label)
+	top.add_child(avatar(title_text(), 40, not group and Store.is_online(peer)))
+	var names := vbox(0)
+	names.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	names.add_child(label(title_text(), 16))
+	status_label = hint(_status_line(), 12)
+	names.add_child(status_label)
+	top.add_child(names)
 	top.add_child(spacer())
+	ping_label = hint(_ping_text(), 12)
+	top.add_child(ping_label)
 	top.add_child(ghost_button(Loc.t("chat_delete"), func() -> void:
 		_confirm_delete()))
 	column.add_child(top)
@@ -132,9 +155,10 @@ func fill_messages() -> void:
 	for child in messages_box.get_children():
 		child.queue_free()
 
-	var list := Store.messages(peer)
+	var list: Array = Store.messages(peer)
 	if list.is_empty():
-		var empty := hint(Loc.t("chat_empty"), 14)
+		var hint_key := "group_invite_hint" if Store.is_group(peer) else "chat_empty"
+		var empty := hint(Loc.t(hint_key), 14)
 		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		var panel := PanelContainer.new()
 		panel.add_theme_stylebox_override("panel", UiStyle.box(pal()["panel"], 20, pal()["line"], 1, 26))
@@ -142,7 +166,15 @@ func fill_messages() -> void:
 		messages_box.add_child(panel)
 		return
 
+	# Разделители по дням: «Сегодня», «Вчера», «18.10.2026»
+	var group := Store.is_group(peer)
+	var last_day := ""
 	for message in list:
+		var ts := int((message as Dictionary).get("ts", 0))
+		var day := Time.get_date_string_from_unix_time(ts) if ts > 0 else ""
+		if day != "" and day != last_day:
+			last_day = day
+			messages_box.add_child(date_separator(day_text(ts)))
 		messages_box.add_child(message_row(message))
 
 ## Одно сообщение: пузырь слева (собеседник) или справа (моё)
@@ -162,6 +194,12 @@ func message_row(message: Dictionary) -> Control:
 	bubble.add_theme_stylebox_override("panel", UiStyle.box(fill, radius, border, 1, 12))
 
 	var body := vbox(4)
+	# В группе подписываем, кто написал (в своих пузырях подпись не нужна)
+	var author := String(message.get("from", ""))
+	if not mine and author != "" and Store.is_group(peer):
+		var author_label := label(author, 12, p["a2"])
+		author_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		body.add_child(author_label)
 	var message_label := label(text, 15, Color("#04121b") if mine else p["text"], true)
 	# Ширина пузыря зависит от длины текста, чтобы короткие сообщения не растягивались
 	message_label.custom_minimum_size = Vector2(clampf(float(text.length()) * 8.4 + 28.0, 56.0, 420.0), 0)
@@ -197,7 +235,7 @@ func send() -> void:
 func _confirm_delete() -> void:
 	var dialog := ConfirmationDialog.new()
 	dialog.theme = UiStyle.build(Store.theme())
-	dialog.dialog_text = Loc.tf("chat_delete_confirm", [peer])
+	dialog.dialog_text = Loc.tf("chat_delete_confirm", [title_text()])
 	dialog.title = Loc.t("chat_delete")
 	dialog.ok_button_text = Loc.t("delete")
 	dialog.cancel_button_text = Loc.t("cancel")

@@ -3,8 +3,6 @@ extends ScreenBase
 ## кто уже есть на устройстве. Если облако настроено, спрашиваем у него,
 ## есть ли такой ник на самом деле.
 
-const P := preload("res://scripts/net/Protocol.gd")
-
 var error_code := ""
 var checking := false
 var typed_nick := ""      ## что ввёл человек (чтобы не потерять при перерисовке)

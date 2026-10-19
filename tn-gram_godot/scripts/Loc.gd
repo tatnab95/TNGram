@@ -72,9 +72,9 @@ const STRINGS := {
 		"settings": "Настройки",
 		"settings_lang": "Язык",
 		"settings_theme": "Тема",
-		"theme_dark": "Тёмная",
-		"theme_green": "Зелёная",
-		"theme_blue": "Синяя",
+		"theme_dark": "Dark",
+		"theme_green": "Green",
+		"theme_blue": "Blue",
 		"settings_account": "Аккаунт",
 		"settings_delete_account": "Удалить аккаунт",
 		"settings_delete_confirm": "Удалить аккаунт %s и всю его переписку?",
@@ -86,12 +86,13 @@ const STRINGS := {
 
 		# --- сглаживание ---
 		"settings_graphics": "Сглаживание",
-		"aa_0": "Выключено",
-		"aa_1": "Обычное",
-		"aa_2": "Улучшенное",
-		"aa_3": "Максимум",
-		"settings_graphics_hint": "Мягкость букв и фона. «Выключено» — резкие пиксельные буквы, «Максимум» — самые гладкие.",
-		"settings_graphics_simple": "Твоя видеокарта работает в простом режиме: сглаживание текста и фона работает, а сглаживание краёв фигур — нет. Хочешь больше — запусти приложение через «TNGram-качество.bat».",
+		"aa_0": "Выкл",
+		"aa_1": "Низкое",
+		"aa_2": "Среднее",
+		"aa_3": "Высокое",
+		"aa_4": "Максимум",
+		"settings_graphics_hint": "Мягкость букв и фона. Выключено — резкие пиксельные буквы, Максимум — самые гладкие.",
+		"settings_graphics_simple": "Твоя видеокарта работает в простом режиме: сглаживание текста и фона работает, а сглаживание краёв фигур — нет. Хочешь больше — запусти приложение через TNGram-качество.bat.",
 
 		# --- звук ---
 		"settings_sound": "Звук",
@@ -141,7 +142,7 @@ const STRINGS := {
 		# --- ошибки ---
 		"err_nick_short": "Ник слишком короткий: нужно хотя бы 2 символа.",
 		"err_nick_long": "Ник слишком длинный: максимум 24 символа.",
-		"err_nick_used": "Такой ник уже занят.",
+		"err_nick_used": "Такой ник уже занят — второй такой же создать нельзя. Войди под этим ником.",
 		"err_no_account": "Аккаунт не найден.",
 		"err_pass_wrong": "Неверный пароль.",
 		"err_pass_mismatch": "Пароли не совпадают.",
@@ -149,7 +150,59 @@ const STRINGS := {
 		"login_checking": "Проверяем пароль на сервере…",
 		"err_pass_empty_second": "Повтори пароль ещё раз.",
 		"err_need_password": "Введи пароль",
-		"err_nick_cloud_taken": "Этот ник уже занят другим человеком. Выбери другой."
+		"err_nick_cloud_taken": "Этот ник уже занят другим человеком. Выбери другой.",
+
+		# --- группы ---
+		"group_title": "Новая группа",
+		"group_name": "Название группы",
+		"newgroup_name_hint": "например, Дачники",
+		"newgroup_create": "Создать группу",
+		"newgroup_members": "Кого добавить",
+		"newgroup_who": "Кого добавить",
+		"newgroup_nobody": "Пока никого нет — сначала начни чат с человеком, потом собери группу.",
+		"newgroup_hint": "Отметь галочками тех, кто будет в группе.",
+		"group_members_count": "Участников: %s",
+		"chats_new_group": "Группа",
+		"err_group_title": "Название группы — хотя бы 2 символа.",
+		"err_group_members": "Отметь хотя бы одного человека.",
+		"group_invite_hint": "Напиши первое сообщение — группа появится у всех, кого отметил.",
+
+		# --- кто в сети ---
+		"status_online": "в сети",
+		"status_offline": "не в сети",
+		"status_last_seen": "был(а) %s",
+		"status_unknown": "когда заходил — не видно",
+		"time_now": "только что",
+		"time_minutes": "%s мин назад",
+		"time_hours": "%s ч назад",
+		"time_days": "%s дн назад",
+
+		# --- обновления ---
+		"update_available": "Доступна новая версия %s",
+		"update_get": "Обновить",
+		"update_check": "Проверить обновления",
+		"update_checking": "Проверяю…",
+		"update_latest": "У тебя последняя версия %s",
+		"update_found": "Вышла версия %s — нажми «Обновить».",
+
+		# --- новости из облака ---
+		"news_from_server": "Новости Тнграма",
+		"news_empty": "Новостей пока нет.",
+		"news_no_connection": "Новости появятся, когда будет связь.",
+
+		# --- поиск ---
+		"chats_search": "Поиск по чатам",
+		"search_nothing": "Ничего не нашлось",
+
+		# --- дни ---
+		"day_today": "Сегодня",
+		"day_yesterday": "Вчера",
+
+		# --- ник занят ---
+		"new_nick_taken_login": "Войти под этим ником",
+		"new_nick_taken_hint": "Если это ты — просто войди, ник останется твоим.",
+		"err_nick_exists_login": "Такой ник уже есть на этом устройстве. Войди под ним.",
+		"err_group_busy": "Группа с таким названием уже есть."
 	},
 	"en": {
 		# --- общее ---
@@ -236,6 +289,7 @@ const STRINGS := {
 		"aa_1": "Normal",
 		"aa_2": "Improved",
 		"aa_3": "Maximum",
+		"aa_4": "Max",
 		"settings_graphics_hint": "How soft letters and the background look. \"Off\" — crisp pixelated letters, \"Maximum\" — the smoothest.",
 		"settings_graphics_simple": "Your graphics card is in simple mode: text and background smoothing work, but shape edges are not smoothed. Want more? Start the app via \"TNGram-качество.bat\".",
 
@@ -287,7 +341,7 @@ const STRINGS := {
 		# --- ошибки ---
 		"err_nick_short": "Nickname is too short: at least 2 characters.",
 		"err_nick_long": "Nickname is too long: 24 characters maximum.",
-		"err_nick_used": "This nickname is already taken.",
+		"err_nick_used": "This nickname already exists — you cannot create a second one. Sign in with it.",
 		"err_no_account": "Account not found.",
 		"err_pass_wrong": "Wrong password.",
 		"err_pass_mismatch": "Passwords do not match.",
@@ -295,7 +349,59 @@ const STRINGS := {
 		"login_checking": "Checking your password on the server…",
 		"err_pass_empty_second": "Please repeat the password.",
 		"err_need_password": "Enter the password",
-		"err_nick_cloud_taken": "This nickname is already taken by someone else. Pick another."
+		"err_nick_cloud_taken": "This nickname is already taken by someone else. Pick another.",
+
+		# --- группы ---
+		"group_title": "New group",
+		"group_name": "Group name",
+		"newgroup_name_hint": "for example, The Dacha",
+		"newgroup_create": "Create group",
+		"newgroup_members": "Who to add",
+		"newgroup_who": "Who to add",
+		"newgroup_nobody": "Nobody yet — start a chat with someone first, then gather a group.",
+		"newgroup_hint": "Tick the people who should be in the group.",
+		"group_members_count": "Members: %s",
+		"chats_new_group": "Group",
+		"err_group_title": "A group name needs at least 2 characters.",
+		"err_group_members": "Tick at least one person.",
+		"group_invite_hint": "Write the first message — the group appears for everyone you ticked.",
+
+		# --- кто в сети ---
+		"status_online": "online",
+		"status_offline": "offline",
+		"status_last_seen": "last seen %s",
+		"status_unknown": "last seen unknown",
+		"time_now": "just now",
+		"time_minutes": "%s min ago",
+		"time_hours": "%s h ago",
+		"time_days": "%s d ago",
+
+		# --- обновления ---
+		"update_available": "A new version %s is available",
+		"update_get": "Update",
+		"update_check": "Check for updates",
+		"update_checking": "Checking…",
+		"update_latest": "You have the latest version %s",
+		"update_found": "Version %s is out — tap \"Update\".",
+
+		# --- новости из облака ---
+		"news_from_server": "Tngram news",
+		"news_empty": "No news yet.",
+		"news_no_connection": "News will appear when there is a connection.",
+
+		# --- поиск ---
+		"chats_search": "Search chats",
+		"search_nothing": "Nothing found",
+
+		# --- дни ---
+		"day_today": "Today",
+		"day_yesterday": "Yesterday",
+
+		# --- занятый ник ---
+		"new_nick_taken_login": "Sign in with this nickname",
+		"new_nick_taken_hint": "The nickname is taken — just sign in with it.",
+		"err_nick_exists_login": "This nickname already exists on this device. Sign in with it.",
+		"err_group_busy": "A group with this name already exists."
 	}
 }
 

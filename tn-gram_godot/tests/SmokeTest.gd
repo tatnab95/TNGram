@@ -22,6 +22,45 @@ func check(title: String, condition: bool, extra: String = "") -> void:
 		failures += 1
 		report("FAIL | " + title + " | " + extra)
 
+## Есть ли в списке чатов запись про этот чат (группа или человек)
+func has_chat(list: Array, key: String, group: bool) -> bool:
+	for item in list:
+		if String((item as Dictionary).get("key", "")) == key \
+				and bool((item as Dictionary).get("group", false)) == group:
+			return true
+	return false
+
+## Есть ли на экране кнопка с таким текстом
+func has_button_named(root: Node, text: String) -> bool:
+	return find_by(root, func(n: Node) -> bool:
+		return n is Button and String(n.text) == text) != null
+
+## Ключи текста, которые просит скрипт: Loc.t("…") и Loc.tf("…")
+func loc_keys_in(text: String) -> Array:
+	var found: Array = []
+	var re := RegEx.create_from_string("Loc\\.tf?\\(\\s*\"([^\"]+)\"")
+	for m in re.search_all(text):
+		found.append(m.get_string(1))
+	return found
+
+## Все файлы *.gd внутри папки (рекурсивно)
+func gd_files(dir_path: String) -> Array:
+	var out: Array = []
+	var dir := DirAccess.open(dir_path)
+	if dir == null:
+		return out
+	dir.list_dir_begin()
+	var entry := dir.get_next()
+	while entry != "":
+		if dir.current_is_dir():
+			if not entry.begins_with("."):
+				out.append_array(gd_files(dir_path.path_join(entry)))
+		elif entry.ends_with(".gd"):
+			out.append(dir_path.path_join(entry))
+		entry = dir.get_next()
+	dir.list_dir_end()
+	return out
+
 func count_nodes(root: Node, class_name_to_find: String) -> int:
 	var total := 0
 	for child in root.get_children():
@@ -685,6 +724,8 @@ func _ready() -> void:
 	var ps: String = TnNotify.build_script("Ваня'с", "привет")
 	check("кавычка в тексте уведомления не ломает команду",
 		ps.contains("''") and ps.contains("ToastNotificationManager"))
+	check("уведомление регистрирует своё имя приложения",
+		ps.contains("TNGram.Notifier") and ps.contains("AppUserModelId"), ps.substr(0, 200))
 	check("длинный текст уведомления обрезается",
 		not TnNotify._clean("x".repeat(500), 100).contains("xxxxx".repeat(30)))
 	check("кириллица и эмодзи переживают кодирование",
@@ -842,6 +883,336 @@ func _ready() -> void:
 	check("пропуск убирается", Store.auth_token("админ") == "", Store.auth_token("админ"))
 
 	Store.logout()
+
+	# ---------------------------------------------------------- 15б. Группы
+	Store.logout()
+	Store.login("админ", "")
+	Store.groups = {}
+	Store.chats = {}
+	var made := Store.create_group("Дачники", ["админ2"])
+	check("группа создаётся", bool(made.get("ok", false)), str(made))
+	var gkey := String(made.get("key", ""))
+	check("адрес группы начинается с «g:»", gkey.begins_with(Protocol.GROUP_PREFIX), gkey)
+	check("группа опознаётся как группа", Store.is_group(gkey))
+	check("название группы на месте", Store.group_title(gkey) == "Дачники", Store.group_title(gkey))
+	check("участники группы записаны", Store.group_members(gkey) == ["админ2"], str(Store.group_members(gkey)))
+	check("сам создатель в участники для отправки не попал",
+		not Store.group_members(gkey).has("админ"))
+	check("но создатель есть в полном составе группы",
+		Store.group_roster(gkey).has("админ") and Store.group_roster(gkey).has("админ2"),
+		str(Store.group_roster(gkey)))
+	check("группа без названия не создаётся",
+		String(Store.create_group("", ["админ2"]).get("error", "")) == "err_group_title")
+	check("группа без людей не создаётся",
+		String(Store.create_group("Пусто", []).get("error", "")) == "err_group_members")
+	check("то же название и тот же создатель — та же группа",
+		Protocol.group_key("Дачники", "админ") == gkey, Protocol.group_key("Дачники", "админ"))
+	check("разные создатели — разные группы", Protocol.group_key("Дачники", "админ2") != gkey)
+	check("в списке чатов группа есть", has_chat(Store.chat_keys(), gkey, true), str(Store.chat_keys()))
+
+	# Письмо в группу сохраняется у отправителя
+	check("в группу можно написать", Store.send_group_message(gkey, "привет всем"))
+	check("письмо в группе на месте", String(Store.last_message(gkey).get("text", "")) == "привет всем",
+		str(Store.last_message(gkey)))
+	check("в группе помечено, кому писать", Store.group_members(gkey) == ["админ2"])
+
+	# Шапка группы едет вместе с текстом — так участник узнаёт про группу
+	var packed := Protocol.encode_group(gkey, "Дачники", Store.group_roster(gkey), "привет всем", "админ")
+	check("письмо группы помечено как групповое", packed.begins_with(Protocol.GROUP_MARK))
+	var opened := Protocol.decode_group(packed)
+	check("адрес группы разбирается из письма", String(opened.get("key", "")) == gkey, str(opened))
+	check("название группы разбирается из письма", String(opened.get("title", "")) == "Дачники", str(opened))
+	check("состав группы разбирается из письма",
+		(opened.get("members", []) as Array).has("админ2") and (opened.get("members", []) as Array).has("админ"),
+		str(opened))
+	check("создатель группы разбирается из письма", String(opened.get("owner", "")) == "админ", str(opened))
+	check("текст письма группы разбирается", String(opened.get("text", "")) == "привет всем", str(opened))
+	check("обычное письмо группой не считается", Protocol.decode_group("привет").is_empty())
+
+	# У получателя та же группа заводится сама
+	Store.logout()
+	Store.login("админ2", "")
+	Store.unread = {}
+	check("письмо из группы принято",
+		Store.receive_group_message("админ", gkey, "Дачники", ["админ", "админ2"], "привет всем", 0, "g-1"))
+	check("группа завелась у получателя", Store.is_group(gkey))
+	check("название группы пришло с письмом", Store.group_title(gkey) == "Дачники", Store.group_title(gkey))
+	check("повтор того же письма не задваивается",
+		Store.receive_group_message("админ", gkey, "Дачники", ["админ", "админ2"], "привет всем", 0, "g-1"))
+	check("письмо в группе осталось одно", Store.messages(gkey).size() == 1, str(Store.messages(gkey).size()))
+	check("непрочитанное в группе посчитано", Store.unread_count(gkey) == 1, str(Store.unread_count(gkey)))
+	check("создатель группы есть в составе у участника",
+		Store.group_roster(gkey).has("админ"), str(Store.group_roster(gkey)))
+	check("ответ из группы уйдёт и создателю", Store.group_members(gkey).has("админ"),
+		str(Store.group_members(gkey)))
+	check("адрес группы не попал в список людей", not Store.contacts().has(gkey), str(Store.contacts()))
+	var same_card := 0
+	for chat_card in Store.chat_keys():
+		if String((chat_card as Dictionary).get("key", "")) == gkey:
+			same_card += 1
+	check("в списке чатов группа ровно одна карточка", same_card == 1, str(same_card))
+
+	# Старое письмо без создателя в шапке: он всё равно добавляется в состав
+	Store.logout()
+	Store.login("админ2", "")
+	Store.receive_group_message("админ", "g:старая_админ", "Старая", ["админ2"], "старое", 0, "g-old")
+	check("в старой группе создатель найден по шапке",
+		Store.group_members("g:старая_админ").has("админ"),
+		str(Store.group_members("g:старая_админ")))
+
+	# ---------------------------------------------------------- 15в. Кто в сети
+	Store.logout()
+	Store.login("админ", "")
+	Store.peer_seen = {}
+	var now := int(Time.get_unix_time_from_system())
+	Store.note_seen("админ2", now)
+	check("свежее «я здесь» — человек в сети", Store.is_online("админ2"))
+	Store.note_seen("админ2", now - Protocol.PRESENCE_ONLINE_SEC - 5)
+	check("давнее «я здесь» — человек не в сети", not Store.is_online("админ2"))
+	check("время последнего визита помнится", Store.seen_at("админ2") == now - Protocol.PRESENCE_ONLINE_SEC - 5)
+	check("регистр букв в нике не важен", Store.seen_at("АДМИН2") == Store.seen_at("админ2"))
+	check("про незнакомца времени нет", Store.seen_at("незнакомец") == 0)
+	var seen_map := Protocol.parse_presence('[{"nick_key":"админ2","nick":"админ2","last_seen":"2026-10-18 12:34:56+00"}]')
+	check("ответ облака про присутствие разбирается", int(seen_map.get("админ2", 0)) > 0, str(seen_map))
+	check("мусор вместо присутствия не ломает", Protocol.parse_presence("garbage").is_empty())
+	check("без ключа ника строка пропускается", Protocol.parse_presence('[{"nick":"x","last_seen":"2026-10-18 12:34:56+00"}]').is_empty())
+	Store.apply_presence({ "админ2": now })
+	check("ответ облака обновляет время", Store.seen_at("админ2") == now, str(Store.seen_at("админ2")))
+	check("про собеседника спрашивают облако", Store.presence_keys().has("админ2"), str(Store.presence_keys()))
+	check("адрес запроса про присутствие собран верно",
+		Protocol.presence_query_url("https://x.supabase.co", ["админ2"]).ends_with(
+			"/rest/v1/presence?select=nick_key,nick,last_seen&nick_key=in.(" + "админ2".uri_encode() + ")"),
+		Protocol.presence_query_url("https://x.supabase.co", ["админ2"]))
+	check("в адресе кириллица уходит percent-encoded",
+		Protocol.presence_query_url("https://x.supabase.co", ["админ2"]).contains("%D0%B0"),
+		Protocol.presence_query_url("https://x.supabase.co", ["админ2"]))
+	check("латиница в адресе остаётся как есть",
+		Protocol.presence_query_url("https://x.supabase.co", ["nick2"]).ends_with(
+			"/rest/v1/presence?select=nick_key,nick,last_seen&nick_key=in.(nick2)"))
+	check("запись о себе идёт upsert-ом по ключу ника",
+		Protocol.presence_url("https://x.supabase.co").ends_with("/rest/v1/presence?on_conflict=nick_key"),
+		Protocol.presence_url("https://x.supabase.co"))
+	check("без ников запрос про присутствие пустой",
+		Protocol.presence_query_url("https://x.supabase.co", []).is_empty())
+
+	# Подписи «в сети» / «был(а) 5 мин назад» — в переписке
+	main.show_screen("chat", "админ2")
+	await get_tree().process_frame
+	check("в переписке видно, что человек в сети", find_label(main.screen, Loc.t("status_online")) != null)
+	Store.note_seen("админ2", now - 300)
+	await get_tree().process_frame
+	check("в переписке видно, когда человек заходил",
+		find_label(main.screen, Loc.tf("status_last_seen", [Loc.tf("time_minutes", ["5"])])) != null,
+		Loc.tf("status_last_seen", [Loc.tf("time_minutes", ["5"])]))
+	var screen_api := main.screen as ScreenBase
+	check("сегодняшний день подписан как «Сегодня»", screen_api.day_text(now) == Loc.t("day_today"), screen_api.day_text(now))
+	check("вчерашний день подписан как «Вчера»", screen_api.day_text(now - 86400) == Loc.t("day_yesterday"),
+		screen_api.day_text(now - 86400))
+	check("свежее время — «только что»", screen_api.time_ago(now) == Loc.t("time_now"), screen_api.time_ago(now))
+	check("час назад — «1 ч назад»", screen_api.time_ago(now - 3600) == Loc.tf("time_hours", ["1"]), screen_api.time_ago(now - 3600))
+	check("двое суток назад — «2 дн назад»", screen_api.time_ago(now - 172800) == Loc.tf("time_days", ["2"]),
+		screen_api.time_ago(now - 172800))
+
+	# Групповой чат: название, участники, автор письма
+	main.show_screen("chat", gkey)
+	await get_tree().process_frame
+	check("в групповом чате видно название", find_label(main.screen, "Дачники") != null)
+	check("в групповом чате видно число участников",
+		find_label(main.screen, Loc.tf("group_members_count", ["2"])) != null,
+		Loc.tf("group_members_count", ["2"]))
+	Store.receive_group_message("админ2", gkey, "Дачники", ["админ", "админ2"], "всем привет")
+	await get_tree().process_frame
+	check("в группе видно, кто написал", find_label(main.screen, "админ2") != null)
+
+	# ---------------------------------------------------------- 15г. Поиск и новости
+	main.show_screen("chats", null)
+	await get_tree().process_frame
+	check("группа видна в списке чатов", find_label(main.screen, "Дачники") != null)
+	check("есть кнопка «Группа»", has_button_named(main.screen, Loc.t("chats_new_group")))
+	check("есть поиск по чатам", find_by(main.screen, func(n: Node) -> bool:
+		return n is LineEdit and String(n.placeholder_text) == Loc.t("chats_search")) != null)
+	var search := find_by(main.screen, func(n: Node) -> bool:
+		return n is LineEdit and String(n.placeholder_text) == Loc.t("chats_search")) as LineEdit
+	if search != null:
+		search.text = "дач"
+		search.text_changed.emit("дач")
+		await get_tree().process_frame
+		check("поиск оставляет подходящий чат", find_label(main.screen, "Дачники") != null)
+		check("поиск убирает неподходящие чаты", find_label(main.screen, "админ2") == null)
+		check("поиск без совпадений никого не показывает", find_label(main.screen, Loc.t("chats_search")) == null)
+		search.text = "абракадабра"
+		search.text_changed.emit("дач")
+		await get_tree().process_frame
+		check("пустой поиск ничего не находит", find_label(main.screen, Loc.t("search_nothing")) != null)
+		search.text = ""
+		search.text_changed.emit("")
+		await get_tree().process_frame
+		check("пустой поиск снова показывает всех", find_label(main.screen, "админ2") != null)
+
+	# Полоса «вышла новая версия» прямо в списке чатов
+	Store.set_remote_version("9.9")
+	main.show_screen("chats", null)
+	await get_tree().process_frame
+	check("в списке чатов видно, что вышла новая версия",
+		find_label(main.screen, Loc.tf("update_available", ["9.9"])) != null)
+	check("в списке чатов есть кнопка «Обновить»", has_button_named(main.screen, Loc.t("update_get")))
+	Store.set_remote_version("")
+
+	# Новости из облака на экране «Что нового»
+	var news := Protocol.parse_news('[{"title":"Заголовок","body":"Текст","created_at":"2026-10-18T09:00:00+00:00"}]')
+	check("новость разбирается", news.size() == 1, str(news))
+	check("заголовок новости читается", String((news[0] as Dictionary).get("title", "")) == "Заголовок", str(news))
+	check("текст новости читается", String((news[0] as Dictionary).get("body", "")) == "Текст", str(news))
+	check("пустая новость пропускается", Protocol.parse_news('[{"title":"","body":""}]').is_empty())
+	check("мусор вместо новостей не ломает", Protocol.parse_news("garbage").is_empty())
+	main.show_screen("news", null)
+	await get_tree().process_frame
+	check("на экране «Что нового» есть блок новостей", find_label(main.screen, Loc.t("news_from_server")) != null)
+
+	# ---------------------------------------------------------- 15д. Прокрутка (телефон)
+	var fling := preload("res://scripts/ui/FlingScroll.gd").new()
+	var fling_target := ScrollContainer.new()
+	fling_target.custom_minimum_size = Vector2(300, 200)
+	fling_target.size = Vector2(300, 200)
+	var tall := Control.new()
+	tall.custom_minimum_size = Vector2(0, 2000)
+	fling_target.add_child(tall)
+	add_child(fling_target)
+	fling.target = fling_target
+	add_child(fling)
+	await get_tree().process_frame
+	check("прокрутка: предел списка известен", fling._scroll_limit() > 0.0, str(fling._scroll_limit()))
+	var strip := Control.new()
+	var strip_button := Button.new()
+	var strip_slider := HSlider.new()
+	strip.add_child(strip_button)
+	strip.add_child(strip_slider)
+	fling.pass_through(strip)
+	check("кнопки пропускают палец к списку", strip_button.mouse_filter == Control.MOUSE_FILTER_PASS,
+		str(strip_button.mouse_filter))
+	check("ползунки не трогаем", strip_slider.mouse_filter == Control.MOUSE_FILTER_STOP,
+		str(strip_slider.mouse_filter))
+	fling._velocity = 600.0
+	fling._on_scroll_ended()
+	check("быстрый рывок пальцем даёт разгон", fling._active)
+	fling._velocity = 20.0
+	fling._on_scroll_ended()
+	check("медленное движение разгона не даёт", not fling._active)
+	fling._velocity = 999999.0
+	fling._on_scroll_ended()
+	check("слишком сильный рывок ограничен", fling._velocity <= fling.max_speed, str(fling._velocity))
+	fling._velocity = 1000.0
+	fling._active = true
+	fling._process(0.5)
+	check("инерция затухает сама", not fling._active, str(fling._velocity))
+	fling.queue_free()
+	fling_target.queue_free()
+
+	# У каждого прокручиваемого экрана есть узел инерции
+	main.show_screen("chats", null)
+	await get_tree().process_frame
+	var flinger := find_by(main.screen, func(n: Node) -> bool:
+		return n.get_script() == preload("res://scripts/ui/FlingScroll.gd"))
+	check("у списка есть узел инерции", flinger != null)
+	check("инерция привязана к прокрутке", flinger != null and flinger.target != null)
+
+	# ---------------------------------------------------------- 15д2. Экран «Новая группа»
+	main.show_screen("newgroup", null)
+	await get_tree().process_frame
+	check("на экране группы есть заголовок", find_label(main.screen, Loc.t("group_title")) != null)
+	check("на экране группы подпись про людей", find_label(main.screen, Loc.t("newgroup_who")) != null)
+	check("на экране группы есть кнопка создания", has_button_named(main.screen, Loc.t("newgroup_create")))
+	var ru_keys: Array = (Loc.STRINGS["ru"] as Dictionary).keys()
+	var en_keys: Array = (Loc.STRINGS["en"] as Dictionary).keys()
+	ru_keys.sort()
+	en_keys.sort()
+	check("русский и английский тексты совпадают по набору ключей", ru_keys == en_keys,
+		"ru=%d en=%d" % [ru_keys.size(), en_keys.size()])
+	# Проверка, что в коде нет несущих ключей
+	var missing := {}
+	var all_files := gd_files("res://scripts")
+	for p in all_files:
+		var f := FileAccess.open(p, FileAccess.READ)
+		if f == null:
+			continue
+		var content := f.get_as_text()
+		f.close()
+		for k in loc_keys_in(content):
+			if k.ends_with("_") or k.contains("%"):
+				continue  # ключ собирается на лету: "theme_" + id, "aa_%d"
+			if not Loc.STRINGS["ru"].has(k) or not Loc.STRINGS["en"].has(k):
+				if not missing.has(k):
+					missing[k] = []
+				missing[k].append(p.get_file())
+	check("в коде нет ключей, которых нет в Loc", missing.is_empty(), str(missing).substr(0, 120))
+	# Темы и уровни сглаживания собираются ключом на лету — сверим их отдельно
+	var dynamic_bad := []
+	for k in ["theme_dark", "theme_green", "theme_blue", "aa_0", "aa_1", "aa_2", "aa_3", "aa_4"]:
+		if not Loc.STRINGS["ru"].has(k) or not Loc.STRINGS["en"].has(k):
+			dynamic_bad.append(k)
+	check("тексты тем и уровней сглаживания на месте", dynamic_bad.is_empty(), str(dynamic_bad))
+	# Никакой экран не должен показывать «сырой» ключ вместо текста
+	main.show_screen("chats", null)
+	await get_tree().process_frame
+	check("в списке чатов нет сырых ключей вместо текста",
+		find_label(main.screen, "chats_new_group") == null and find_label(main.screen, "net_online") == null and find_label(main.screen, "status_online") == null)
+
+	# ---------------------------------------------------------- 15е. Занятый ник — войти, а не создать
+	main.show_screen("new", null)
+	await get_tree().process_frame
+	main.screen.error_code = "err_nick_used"
+	main.screen.rebuild()
+	await get_tree().process_frame
+	check("при занятом нике видно объяснение", not Loc.t("err_nick_used").is_empty())
+	check("при занятом нике есть кнопка «войти под этим ником»",
+		has_button_named(main.screen, Loc.t("new_nick_taken_login")))
+	main.show_screen("login", "админ2")
+	await get_tree().process_frame
+	check("вход сразу открывается под нужным ником", find_label(main.screen, "админ2") != null)
+	check("на шаге входа есть поле пароля", find_by(main.screen, func(n: Node) -> bool:
+		return n is LineEdit and bool(n.secret)) != null)
+	check("второй такой же ник не создать", String(Store.create_account("АДМИН ", "").get("error", "")) == "err_nick_used")
+
+	# ---------------------------------------------------------- 15ж. Клоны аккаунтов и чатов
+	Store.logout()
+	Store.login("админ", "")
+	Store.chats = {}
+	Store.chats["админ"] = { "АДМИН2": [ { "text": "старое", "ts": 5, "mine": false } ] }
+	Store.chats["АДМИН"] = { "админ2": [ { "text": "новое", "ts": 7, "mine": false } ] }
+	Store.unread = { "АДМИН": { "АДМИН2": 2 }, "админ": { "админ2": 3 } }
+	Store.accounts.append({ "nick": "АДМИН", "pass_hash": "", "created": 1 })
+	Store._normalize_data()
+	var acc_names: Array = []
+	for acc in Store.accounts:
+		acc_names.append(String((acc as Dictionary).get("nick", "")))
+	check("клон аккаунта склеен в один",
+		acc_names.filter(func(n: String) -> bool: return n.to_lower() == "админ").size() == 1, str(acc_names))
+	check("аккаунт остался под своим написанием", acc_names.has("админ"), str(acc_names))
+	var merged_chat := Store.messages("АДМИН2")
+	check("чаты-клоны склеены", merged_chat.size() == 2, str(merged_chat))
+	check("письма встали по времени",
+		String((merged_chat[0] as Dictionary).get("text", "")) == "старое"
+		and String((merged_chat[1] as Dictionary).get("text", "")) == "новое", str(merged_chat))
+	check("непрочитанные сложились", Store.unread_count("АДМИН2") == 5, str(Store.unread_count("АДМИН2")))
+	check("непрочитанные видны при любом написании", Store.unread_count("админ2") == 5)
+	check("владельцы-клоны склеены", Store.chats.size() == 1, str(Store.chats.keys()))
+	Store.groups = {}
+	Store.groups["АДМИН"] = { "g:дачники_админ": { "title": "Дачники", "members": ["админ2"], "owner": "админ", "created": 1 } }
+	Store.groups["админ"] = { "g:дачники_админ": { "title": "Дачники", "members": ["админ", "админ2"], "owner": "админ", "created": 1 } }
+	Store._normalize_data()
+	check("группы-клоны склеены", Store.groups.size() == 1, str(Store.groups.keys()))
+	check("в склеенной группе состав полон",
+		Store.group_roster("g:дачники_админ").has("админ") and Store.group_roster("g:дачники_админ").has("админ2"),
+		str(Store.group_roster("g:дачники_админ")))
+	check("имя собеседника берётся из аккаунта", Store.peer_title("АДМИН2") == "админ2", Store.peer_title("АДМИН2"))
+	check("группе имя — её название", Store.peer_title("g:дачники_админ") == "Дачники")
+
+	# Уборка после новых проверок: данные — как после первого запуска
+	Store.groups = {}
+	Store.chats = {}
+	Store.unread = {}
+	Store.peer_seen = {}
+	Store.save_data()
 
 	# ---------------------------------------------------------- 16. Итог и уборка
 	Store.delete_account("тест")

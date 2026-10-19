@@ -6,6 +6,9 @@ class_name ScreenBase
 ## Экран просит показать другой экран: navigate("chat", "админ")
 signal navigate(target: String, arg: Variant)
 
+const P := preload("res://scripts/net/Protocol.gd")
+const FlingScrollScript := preload("res://scripts/ui/FlingScroll.gd")
+
 const PAD := 26  ## отступ содержимого от краёв окна
 
 ## Текущая палитра темы
@@ -71,12 +74,63 @@ func vspacer() -> Control:
 	node.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	return node
 
-## Прокручиваемая область
+## Прокручиваемая область. Двигается пальцем с разгоном (см. FlingScroll) и
+## сама доводит до поля ввода, когда открывается клавиатура на телефоне.
 func scroll() -> ScrollContainer:
 	var node := ScrollContainer.new()
 	node.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	node.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	node.follow_focus = true
+	var fling := FlingScrollScript.new()
+	fling.name = "FlingScroll"
+	fling.target = node
+	add_child(fling)
 	return node
+
+## ------------------------------------------------------------------ цвета
+
+## Свой цвет для каждого ника: одинаковый ник — всегда один и тот же цвет.
+## Так аватарки различаются с первого взгляда, а не все одинаковые.
+func nick_color(nick: String) -> Color:
+	var key := nick.strip_edges().to_lower()
+	if key == "":
+		key = "?"
+	var hue := float(absi(hash(key)) % 360) / 360.0
+	return Color.from_hsv(hue, 0.52, 0.96)
+
+## ------------------------------------------------------------------ кто в сети
+
+## Подпись про человека: «в сети», «был(а) 5 мин назад» или пусто, если не знаем.
+func status_text(nick: String) -> String:
+	if Store.is_online(nick):
+		return Loc.t("status_online")
+	var seen := Store.seen_at(nick)
+	if seen <= 0:
+		return ""
+	return Loc.tf("status_last_seen", [time_ago(seen)])
+
+## «только что», «5 мин назад», «3 ч назад», «2 дн назад»
+func time_ago(ts: int) -> String:
+	var diff := maxi(int(Time.get_unix_time_from_system()) - ts, 0)
+	if diff < 60:
+		return Loc.t("time_now")
+	if diff < 3600:
+		return Loc.tf("time_minutes", [str(diff / 60)])
+	if diff < 86400:
+		return Loc.tf("time_hours", [str(diff / 3600)])
+	return Loc.tf("time_days", [str(diff / 86400)])
+
+## Подпись дня для разделителя в переписке: «Сегодня», «Вчера», «18.10.2026»
+func day_text(ts: int) -> String:
+	var today := int(Time.get_unix_time_from_system())
+	if ts <= 0:
+		return ""
+	if Time.get_date_string_from_unix_time(ts) == Time.get_date_string_from_unix_time(today):
+		return Loc.t("day_today")
+	if Time.get_date_string_from_unix_time(ts) == Time.get_date_string_from_unix_time(today - 86400):
+		return Loc.t("day_yesterday")
+	var d := Time.get_datetime_dict_from_unix_time(ts)
+	return "%02d.%02d.%04d" % [int(d.get("day", 1)), int(d.get("month", 1)), int(d.get("year", 2000))]
 
 ## ---------------------------------------------------------------- кнопки
 
@@ -118,9 +172,9 @@ func toggle_button(text: String, active: bool, on_press: Callable = Callable()) 
 
 ## ---------------------------------------------------------------- карточки
 
-## Круглая «аватарка» с первой буквой ника
-func avatar(nick: String, size: int = 44) -> Control:
-	var p := pal()
+## Круглая «аватарка» с первой буквой ника. Цвет свой у каждого ника, а зелёная
+## точка в углу показывает, что человек сейчас в сети.
+func avatar(nick: String, size: int = 44, online: bool = false) -> Control:
 	var holder := Control.new()
 	holder.custom_minimum_size = Vector2(size, size)
 	holder.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -128,7 +182,7 @@ func avatar(nick: String, size: int = 44) -> Control:
 	# Круг рисуем крупной текстурой и уменьшаем: сглаженный край получается
 	# в любом графическом режиме, даже там, где MSAA не работает.
 	var circle := TextureRect.new()
-	circle.texture = UiStyle.circle_texture(p["a1"].lerp(p["a2"], 0.35), Color(1, 1, 1, 0.35), 128)
+	circle.texture = UiStyle.circle_texture(_avatar_color(nick), Color(1, 1, 1, 0.35), 128)
 	circle.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	circle.stretch_mode = TextureRect.STRETCH_SCALE
 	circle.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
@@ -142,10 +196,40 @@ func avatar(nick: String, size: int = 44) -> Control:
 	letter.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	letter.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	holder.add_child(letter)
+
+	if online:
+		holder.add_child(online_dot(size))
 	return holder
 
-## Кликабельная карточка: аватар, ник, подпись, справа — время
-func contact_button(nick: String, subtitle: String, right_text: String, on_press: Callable) -> Button:
+## Цвет аватарки: свой у каждого ника, у группы — спокойный цвет темы.
+func _avatar_color(nick: String) -> Color:
+	if P.is_group_key(nick):
+		return pal()["a2"].lerp(Color("#ffffff"), 0.25)
+	return nick_color(nick)
+
+## Зелёная точка «в сети» в правом нижнем углу аватарки
+func online_dot(size: int) -> Control:
+	var dot := TextureRect.new()
+	var side := maxf(float(size) * 0.3, 8.0)
+	dot.texture = UiStyle.circle_texture(Color("#3ddc84"), Color(0, 0, 0, 0.55), 64)
+	dot.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	dot.stretch_mode = TextureRect.STRETCH_SCALE
+	dot.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dot.anchor_left = 1.0
+	dot.anchor_right = 1.0
+	dot.anchor_top = 1.0
+	dot.anchor_bottom = 1.0
+	dot.offset_left = -side
+	dot.offset_right = 0.0
+	dot.offset_top = -side
+	dot.offset_bottom = 0.0
+	return dot
+
+## Кликабельная карточка: аватар, ник, подпись, справа — время.
+## online — показать зелёную точку «в сети»; unread — значок непрочитанных.
+func contact_button(nick: String, subtitle: String, right_text: String, on_press: Callable,
+		online: bool = false, unread: int = 0) -> Button:
 	var p := pal()
 	var button := Button.new()
 	button.custom_minimum_size = Vector2(0, 74)
@@ -165,7 +249,7 @@ func contact_button(nick: String, subtitle: String, right_text: String, on_press
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(row)
 
-	row.add_child(avatar(nick, 46))
+	row.add_child(avatar(nick, 46, online))
 
 	var texts := vbox(2)
 	texts.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -178,12 +262,52 @@ func contact_button(nick: String, subtitle: String, right_text: String, on_press
 	texts.add_child(sub)
 	row.add_child(texts)
 
+	if unread > 0:
+		var badge := PanelContainer.new()
+		badge.add_theme_stylebox_override("panel", UiStyle.box(p["a1"].lerp(p["a2"], 0.35), 999, Color(0, 0, 0, 0), 0, 6))
+		badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var count := label(str(unread), 12, Color("#04121b"))
+		count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		badge.add_child(count)
+		row.add_child(badge)
+
 	if right_text != "":
 		var right := label(right_text, 12, p["muted"])
 		right.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		right.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(right)
 
+	return button
+
+## Разделитель по дате в переписке: «Сегодня», «Вчера», «18.10.2026»
+func date_separator(text: String) -> Control:
+	var row := hbox(10)
+	row.add_child(spacer())
+	var chip := PanelContainer.new()
+	chip.add_theme_stylebox_override("panel",
+		UiStyle.box(pal()["panel"], 999, pal()["line"], 1, 5))
+	var text_label := label(text, 12, pal()["muted"])
+	chip.add_child(text_label)
+	row.add_child(chip)
+	row.add_child(spacer())
+	return row
+
+## Строка с галочкой — для выбора людей в группу
+func check_row(title: String, checked: bool, on_toggle: Callable) -> Control:
+	var button := Button.new()
+	button.toggle_mode = true
+	button.button_pressed = checked
+	button.focus_mode = Control.FOCUS_NONE
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.custom_minimum_size = Vector2(0, 42)
+	button.add_theme_stylebox_override("normal", UiStyle.box(pal()["panel"], 14, pal()["line"], 1, 10))
+	button.add_theme_stylebox_override("hover", UiStyle.box(pal()["panel_strong"], 14, pal()["a2"], 1, 10))
+	button.add_theme_stylebox_override("pressed", UiStyle.box(pal()["panel_strong"], 14, pal()["a2"], 1, 10))
+	button.add_theme_stylebox_override("focus", UiStyle.box(Color(0, 0, 0, 0), 14, Color(0, 0, 0, 0), 0, 10))
+	button.text = ("✓  " if checked else "•  ") + title
+	button.toggled.connect(func(on: bool) -> void:
+		button.text = ("✓  " if on else "•  ") + title
+		on_toggle.call(on))
 	return button
 
 ## Строка настроек: подпись слева, содержимое справа

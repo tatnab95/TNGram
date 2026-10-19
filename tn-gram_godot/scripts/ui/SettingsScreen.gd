@@ -1,13 +1,12 @@
 extends ScreenBase
 ## Настройки: язык, тема, связь, аккаунт, удаление аккаунта, о приложении.
 
-const P := preload("res://scripts/net/Protocol.gd")
-
 var address_field: LineEdit
 var key_field: LineEdit
 var connect_button: Button
 var auto_check: CheckButton
 var status_label: Label
+var update_status: Label  ## ответ проверки обновлений
 
 func _ready() -> void:
 	build()
@@ -77,6 +76,9 @@ func build() -> void:
 	# --- связь ---
 	list.add_child(net_block())
 
+	# --- обновления ---
+	list.add_child(update_block())
+
 	# --- аккаунт ---
 	list.add_child(settings_row(Loc.t("settings_account"), label(Store.current_nick, 15)))
 
@@ -106,6 +108,44 @@ func build() -> void:
 	about_box.add_child(news_row)
 	about.add_child(about_box)
 	list.add_child(about)
+
+## ------------------------------------------------------------- обновления
+
+## Проверка обновлений: что установлено, кнопка и понятный ответ.
+## Человек сам решает, когда проверять — но новая версия видна сразу.
+func update_block() -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", UiStyle.box(pal()["panel"], 18, pal()["line"], 1, 16))
+	var box := vbox(10)
+	var row := hbox(12)
+	row.add_child(label(Loc.t("update_check"), 15))
+	row.add_child(spacer())
+	row.add_child(hint(Loc.tf("settings_version", [P.APP_VERSION]), 13))
+	box.add_child(row)
+	update_status = hint(_update_status_text(), 13)
+	box.add_child(update_status)
+	var buttons := hbox(10)
+	buttons.add_child(ghost_button(Loc.t("update_check"), func() -> void: _check_updates()))
+	if Store.update_available() != "":
+		buttons.add_child(accent_button(Loc.t("update_get"), func() -> void:
+			app().open_update()))
+	box.add_child(buttons)
+	panel.add_child(box)
+	return panel
+
+func _update_status_text() -> String:
+	var fresh := Store.update_available()
+	if fresh != "":
+		return Loc.tf("update_available", [fresh])
+	return Loc.tf("update_latest", [P.APP_VERSION])
+
+## Спросить у сайта и облака, не вышла ли новая версия, и показать ответ
+func _check_updates() -> void:
+	if update_status != null and is_instance_valid(update_status):
+		update_status.text = Loc.t("update_checking")
+	app().check_update(true, func(_remote: String) -> void:
+		if is_inside_tree():
+			rebuild())
 
 ## ------------------------------------------------------------- сглаживание
 

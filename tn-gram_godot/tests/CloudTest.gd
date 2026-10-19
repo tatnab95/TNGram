@@ -9,6 +9,7 @@ extends Node
 ## если он офлайн, и удаляется из облака после доставки.
 
 const TnNetScript := preload("res://scripts/net/TnNet.gd")
+const Protocol := preload("res://scripts/net/Protocol.gd")
 
 const FALLBACK_URL := "https://hqmgjnloilemdwejzoyy.supabase.co"
 const FALLBACK_KEY := "sb_publishable_eyJSH1Zs1IDEeE61009XDw_cQt5ujXj"
@@ -198,6 +199,57 @@ func _ready() -> void:
 		return not c.is_online() and not c.is_connecting(), 20000)
 	check("с неверным ключом связи нет и сказано почему", refused and not c.is_online(), c.status_text())
 	c.stop()
+
+	# ---------------------------------------------------------- 7. Кто в сети и новости
+	#  Эти таблицы добавляет «Обновление-1.6.sql». Если его ещё не запускали —
+	#  проверка не падает, а честно говорит «пропущено».
+	# Сначала кириллицей: раньше тело уходило без перекодировки и облако
+	# заводило мусорный ключ из «?» — человек просто пропадал из «в сети».
+	var cyrillic := "проба_кир_" + nick_a.substr(nick_a.length() - 3)
+	var cyr_ping := { "done": false, "ok": false }
+	a.cloud_presence_ping(url, key, cyrillic, func(ok: bool) -> void:
+		cyr_ping["done"] = true
+		cyr_ping["ok"] = ok)
+	await wait_until(func() -> bool: return bool(cyr_ping["done"]), 10000)
+	var cyr_seen := { "done": false, "map": {} }
+	a.cloud_presence_get(url, key, [cyrillic], func(ok: bool, map: Dictionary) -> void:
+		cyr_seen["done"] = true
+		cyr_seen["map"] = map)
+	await wait_until(func() -> bool: return bool(cyr_seen["done"]), 10000)
+	var cyr_map: Dictionary = cyr_seen["map"]
+	check("кириллический ник возвращается из «кто в сети»",
+		cyr_map.has(Protocol.nick_key(cyrillic)), str(cyr_map))
+	check("время у кириллического ника не потеряно",
+		int(cyr_map.get(Protocol.nick_key(cyrillic), 0)) > 1700000000,
+		str(cyr_map.get(Protocol.nick_key(cyrillic), 0)))
+
+	var ping := { "done": false, "ok": false }
+	a.cloud_presence_ping(url, key, nick_a, func(ok: bool) -> void:
+		ping["done"] = true
+		ping["ok"] = ok)
+	await wait_until(func() -> bool: return bool(ping["done"]), 10000)
+	check("приложение умеет отметиться «я в сети»", bool(ping["done"]), str(ping))
+	if bool(ping["ok"]):
+		var seen := { "done": false, "ok": false, "map": {} }
+		a.cloud_presence_get(url, key, [nick_a, nick_b], func(ok: bool, map: Dictionary) -> void:
+			seen["done"] = true
+			seen["ok"] = ok
+			seen["map"] = map)
+		await wait_until(func() -> bool: return bool(seen["done"]), 10000)
+		var seen_map: Dictionary = seen["map"]
+		var my_key := Protocol.nick_key(nick_a)
+		check("облако отвечает, кто был в сети", bool(seen["ok"]) and seen_map.has(my_key), str(seen_map))
+		check("время «был в сети» приходит секундами",
+			int(seen_map.get(my_key, 0)) > 1700000000, str(seen_map.get(my_key, 0)))
+		var news := { "done": false, "ok": false, "items": [] }
+		a.cloud_fetch_news(url, key, func(ok: bool, items: Array) -> void:
+			news["done"] = true
+			news["ok"] = ok
+			news["items"] = items)
+		await wait_until(func() -> bool: return bool(news["done"]), 10000)
+		check("облако отвечает списком новостей", bool(news["done"]) and bool(news["ok"]), str(news["done"]))
+	else:
+		report("ПРОПУСК | таблицы presence и news ещё нет — запусти build/Облако-SQL-вставить-в-Supabase.txt в Supabase")
 
 	# ---------------------------------------------------------- уборка
 	a.stop()

@@ -1,8 +1,6 @@
 extends ScreenBase
 ## Экран создания ника: имя + необязательный пароль. Номер телефона не нужен.
 
-const P := preload("res://scripts/net/Protocol.gd")
-
 var error_code := ""
 var typed_nick := ""   ## что ввёл человек, чтобы не потерять при перерисовке
 
@@ -70,6 +68,13 @@ func build() -> void:
 	if error_code != "":
 		column.add_child(label(Loc.t(error_code), 14, Color("#ff9a9a")))
 
+	# Ник занят: второй такой же создать нельзя — предлагаем просто войти под ним
+	if nick_is_taken():
+		column.add_child(hint(Loc.t("new_nick_taken_hint"), 13))
+		var enter := accent_button(Loc.t("new_nick_taken_login"), func() -> void:
+			navigate.emit("login", nick_edit.text.strip_edges()))
+		column.add_child(enter)
+
 	# Кнопка создания
 	var submit := accent_button(Loc.t("new_submit"), func() -> void:
 		_submit(nick_edit.text, pass_edit.text, repeat_edit.text))
@@ -86,6 +91,10 @@ func build() -> void:
 	nick_edit.grab_focus()
 
 ## ------------------------------------------------------------- действия
+
+## Ник уже существует (здесь или в облаке) — тогда предлагаем войти, а не злиться
+func nick_is_taken() -> bool:
+	return error_code in ["err_nick_used", "err_nick_cloud_taken", "err_nick_exists_login"]
 
 func _submit(nick: String, password: String, repeat: String) -> void:
 	typed_nick = nick.strip_edges()

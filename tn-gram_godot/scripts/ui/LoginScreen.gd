@@ -1,13 +1,14 @@
 extends ScreenBase
 ## Экран входа: выбор аккаунта на устройстве, вход, переход к созданию ника.
 
-const P := preload("res://scripts/net/Protocol.gd")
-
 var password_for := ""   ## если не пусто — показываем шаг ввода пароля
 var error_code := ""
 var busy := false        ## спрашиваем сервер — кнопку временно не нажимать
+var prefill := ""        ## ник, который надо открыть сразу (пришли с экрана создания)
 
 func _ready() -> void:
+	if prefill.strip_edges() != "" and password_for == "":
+		password_for = prefill.strip_edges()
 	build()
 
 ## Перерисовать экран (после смены языка и т. п.)
@@ -143,6 +144,11 @@ func _on_pick_account(nick: String) -> void:
 	_try_login(nick, "")
 
 func _try_login(nick: String, password: String) -> void:
+	# Ника на этом устройстве ещё нет. Если он есть в облаке (человек создал его
+	# на другом телефоне) — входим, а не создаём второй такой же.
+	if not Store.account_exists(nick):
+		await _login_cloud_only(nick, password)
+		return
 	if busy:
 		return
 	var result := Store.login(nick, password)
@@ -213,6 +219,48 @@ func _cloud_login(nick: String, password: String) -> String:
 	if String(signup["reason"]) == "user_already_exists":
 		return "wrong"
 	return "offline"
+
+## Вход под ником, которого нет на этом устройстве: спрашиваем облако. Если
+## пароль верный — заводим вход здесь. Нового ника не появляется: это тот же ник.
+func _login_cloud_only(nick: String, password: String) -> void:
+	var clean := nick.strip_edges()
+	if OS.get_environment("TNGRAM_PROFILE").strip_edges() != "" or not P.is_cloud(Store.relay_host()):
+		error_code = "err_no_account"
+		password_for = clean
+		rebuild()
+		return
+	busy = true
+	error_code = ""
+	password_for = clean
+	rebuild()
+	var state := { "done": false, "ok": false, "reason": "", "session": {} }
+	Net.cloud_auth_login(Store.relay_host(), Store.relay_key(), clean, password,
+		func(ok: bool, reason: String, session: Dictionary) -> void:
+			state["done"] = true
+			state["ok"] = ok
+			state["reason"] = reason
+			state["session"] = session)
+	await _await_state(state, 10000)
+	if not is_instance_valid(self) or not is_inside_tree():
+		return
+	busy = false
+	if not bool(state["done"]):
+		error_code = "err_no_account"
+	elif not bool(state["ok"]):
+		var reason := String(state["reason"])
+		error_code = "err_pass_wrong" if reason == "invalid_credentials" else "err_no_account"
+	if error_code != "":
+		rebuild()
+		return
+	if not Store.account_exists(clean):
+		Store.create_account(clean, password)
+	Store.set_session(clean, state["session"])
+	var result := Store.login(clean, password)
+	if bool(result.get("ok", false)):
+		navigate.emit("chats", null)
+		return
+	error_code = String(result.get("error", ""))
+	rebuild()
 
 ## Ждать ответа сети, но не дольше отведённого срока
 func _await_state(state: Dictionary, ms: int) -> void:

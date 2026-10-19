@@ -9,11 +9,16 @@ const SCREENS := {
 	"chats": preload("res://scripts/ui/ChatListScreen.gd"),
 	"chat": preload("res://scripts/ui/ChatScreen.gd"),
 	"newchat": preload("res://scripts/ui/NewChatScreen.gd"),
+	"newgroup": preload("res://scripts/ui/NewGroupScreen.gd"),
 	"news": preload("res://scripts/ui/NewsScreen.gd"),
 	"settings": preload("res://scripts/ui/SettingsScreen.gd")
 }
 
 const P := preload("res://scripts/net/Protocol.gd")
+
+## Как часто говорим облаку «я здесь» и как часто спрашиваем про других.
+const PRESENCE_BEAT := 25.0
+const PRESENCE_LOOK := 12.0
 
 var current_id := "login"
 var current_arg: Variant = null
@@ -21,6 +26,9 @@ var screen: Control = null
 var background: Control = null
 var _nick_checked := ""  ## ник, который уже сверили с облаком (чтобы не дёргать зря)
 var _update_checked := false  ## версию на сайте проверяем один раз за запуск
+var _update_answer: Callable = Callable()  ## кому сказать, чем кончилась проверка версии
+var _presence_beat := 2.0  ## через сколько отметить себя в сети
+var _presence_look := 5.0  ## через сколько спросить про остальных
 var toast_layer: Control = null  ## слой всплывающих уведомлений
 var toast_column: VBoxContainer = null  ## колонка карточек в этом слое
 const TOAST_WIDTH := 320.0  ## ширина карточки-уведомления
@@ -45,6 +53,54 @@ func _ping_tick() -> void:
 	if not is_inside_tree():
 		return
 	Net.measure_ping()
+
+## Пульс приложения: «я здесь» для облака и вопрос «кто ещё здесь».
+## Работает тихо: если сети нет — просто ничего не делает.
+func _process(delta: float) -> void:
+	if Store.current_nick == "":
+		return
+	_presence_beat -= delta
+	if _presence_beat <= 0.0:
+		_presence_beat = PRESENCE_BEAT
+		presence_beat()
+	_presence_look -= delta
+	if _presence_look <= 0.0:
+		_presence_look = PRESENCE_LOOK
+		presence_look()
+
+## Отметить себя в сети. Без облака или без входа ничего не делаем.
+func presence_beat() -> void:
+	if Store.current_nick == "" or OS.get_environment("TNGRAM_PROFILE").strip_edges() != "":
+		return
+	if not P.is_cloud(Store.relay_host()):
+		return
+	var nick := Store.current_nick
+	Net.cloud_presence_ping(Store.relay_host(), Store.relay_key(), nick, func(ok: bool) -> void:
+		if ok and is_inside_tree():
+			Store.note_seen(nick, int(Time.get_unix_time_from_system())))
+
+## Спросить облако, кто из знакомых в сети (обновляет зелёные точки)
+func presence_look() -> void:
+	if Store.current_nick == "" or not P.is_cloud(Store.relay_host()):
+		return
+	if OS.get_environment("TNGRAM_PROFILE").strip_edges() != "":
+		return
+	var keys := Store.presence_keys()
+	var open_key := P.nick_key(_peer_nick())
+	if open_key != "" and not keys.has(open_key):
+		keys.append(open_key)
+	if keys.is_empty():
+		return
+	Net.cloud_presence_get(Store.relay_host(), Store.relay_key(), keys, func(ok: bool, found: Dictionary) -> void:
+		if ok and is_inside_tree() and not found.is_empty():
+			Store.apply_presence(found))
+
+## Ник того, с кем открыт чат (пусто — чат не открыт или это группа)
+func _peer_nick() -> String:
+	if current_id != "chat" or current_arg == null:
+		return ""
+	var key := String(current_arg)
+	return "" if Store.is_group(key) else key
 
 ## На телефоне экран вытянут вертикально, а размеры в приложении считаются
 ## от ширины окна. Берём для телефона узкую основу — тогда текст и кнопки
@@ -95,6 +151,9 @@ func show_screen(id: String, arg: Variant = null) -> void:
 	node.set_anchors_preset(Control.PRESET_FULL_RECT)
 	if id == "chat":
 		node.set("peer", String(arg) if arg != null else "")
+	elif id == "login" and arg != null:
+		# Пришли с экрана создания ника: сразу открываем вход под этим ником
+		node.set("prefill", String(arg))
 	add_child(node)
 	node.navigate.connect(_on_navigate)
 	screen = node
@@ -115,18 +174,56 @@ func _on_navigate(target: String, arg: Variant) -> void:
 ## ---------------------------------------------------------------- связь
 
 ## Отправить сообщение: сначала сохраняем у себя, потом пробуем отправить по сети.
+## Если собеседник — группа, письмо уходит всем участникам (см. send_group_message).
 func send_message(peer: String, text: String) -> bool:
+	if Store.is_group(peer):
+		return send_group_message(peer, text)
 	if not Store.send_message(peer, text):
 		return false
 	Sfx.play("sent")
 	Net.send_message(peer, text)
 	return true
 
+## Отправить в группу: сохраняем у себя, а каждому участнику уходит копия.
+## Название группы и её состав едут вместе с текстом — получатель заводит
+## такую же группу у себя, поэтому отдельных таблиц для групп не нужно.
+func send_group_message(key: String, text: String) -> bool:
+	if not Store.send_group_message(key, text):
+		return false
+	Sfx.play("sent")
+	var title := Store.group_title(key)
+	var owner_nick := String(Store.group_info(key).get("owner", ""))
+	# В шапку едет полный состав (включая создателя и меня), а уходит копия
+	# всем, кроме меня. Так у каждого участника группа выглядит одинаково
+	# и ответ доходит до всех.
+	var packed := P.encode_group(key, title, Store.group_roster(key), text, owner_nick)
+	for member in Store.group_members(key):
+		Net.send_message(member, packed)
+	return true
+
 ## Входящее сообщение из сети: сохраняем у себя и только тогда подтверждаем — сервер удалит.
 func _on_net_message(from_nick: String, text: String, ts: int, net_id: String) -> bool:
+	var group := P.decode_group(text)
+	if not group.is_empty():
+		return _take_group_message(from_nick, group, ts, net_id)
 	var saved := Store.receive_message(from_nick, text, ts, net_id)
 	if saved:
 		notify_new_message(from_nick, text)
+	return saved
+
+## Сообщение из группы: заводим группу (если впервые слышим) и записываем текст
+func _take_group_message(from_nick: String, group: Dictionary, ts: int, net_id: String) -> bool:
+	var key := String(group.get("key", ""))
+	var title := String(group.get("title", ""))
+	var body := String(group.get("text", ""))
+	if body.strip_edges() == "":
+		return true
+	var raw_members: Variant = group.get("members", [])
+	var roster: Array = raw_members if typeof(raw_members) == TYPE_ARRAY else []
+	var owner_nick := String(group.get("owner", ""))
+	var saved := Store.receive_group_message(from_nick, key, title, roster, body, ts, net_id, owner_nick)
+	if saved:
+		notify_new_message(title if title != "" else key, body, from_nick)
 	return saved
 
 ## Выйти на связь, если это включено в настройках и мы уже вошли
@@ -234,13 +331,34 @@ func add_blob(anchor: Vector2, size: float, color: Color, strength: float) -> vo
 
 ## Звук нового сообщения. Если сейчас открыт именно этот чат — карточку не
 ## показываем (и так всё видно), но звук оставляем.
-func notify_new_message(from_nick: String, text: String) -> void:
+## group_title не пустой, если сообщение пришло в группу: тогда карточка
+## подписывается названием группы, а внутри видно, кто написал.
+func notify_new_message(from_nick: String, text: String, group_title: String = "") -> void:
 	Sfx.play("incoming")
-	if from_nick == current_peer():
+	var peer := group_title if group_title != "" else from_nick
+	var open := current_peer()
+	if _same_peer(open, peer):
 		return
-	if Store.notify_on():
-		show_toast(from_nick, text)
+	if not Store.notify_on():
+		return
+	var in_group := group_title != ""
+	var title := peer
+	var body := (from_nick + ": " + text) if in_group else text
+	# Свёрнутое окно или другое приложение поверх — сообщение всё равно заметят:
+	# на Windows всплывает системное уведомление, на телефоне вибрация
+	# (в самом движке статусного уведомления Android нет, вибрация есть).
+	var hidden := not has_focus()
+	if Store.notify_os() and hidden and TnNotify.toast(title, body):
 		DisplayServer.window_request_attention()
+		return
+	if hidden and OS.has_feature("mobile"):
+		Input.vibrate_handheld(220)
+	show_toast(peer, text, from_nick if in_group else "")
+	DisplayServer.window_request_attention()
+
+## Это один и тот же чат? Регистр букв не важен.
+func _same_peer(a: String, b: String) -> bool:
+	return a != "" and b != "" and P.nick_key(a) == P.nick_key(b)
 
 ## Ник открытого сейчас чата ("" — открыт не чат)
 func current_peer() -> String:
@@ -251,8 +369,9 @@ func current_peer() -> String:
 ## ---------------------------------------------------------------- уведомления
 
 ## Всплывающая карточка «пришло сообщение». Сама исчезает через несколько секунд,
-## щелчок открывает чат с этим человеком.
-func show_toast(from_nick: String, text: String) -> void:
+## щелчок открывает чат с этим человеком (или с группой).
+## author не пустой у групп: «название группы» + «кто написал: текст».
+func show_toast(peer: String, text: String, author: String = "") -> void:
 	var layer := ensure_toast_layer()
 	if layer == null or toast_column == null:
 		return
@@ -269,13 +388,13 @@ func show_toast(from_nick: String, text: String) -> void:
 	card.add_child(box)
 
 	var title := Label.new()
-	title.text = from_nick
+	title.text = peer
 	title.add_theme_font_size_override("font_size", 15)
 	title.add_theme_color_override("font_color", p["a2"])
 	box.add_child(title)
 
 	var body := Label.new()
-	body.text = text
+	body.text = (author + ": " + text) if author != "" else text
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.add_theme_font_size_override("font_size", 13)
 	body.add_theme_color_override("font_color", p["text"])
@@ -293,7 +412,7 @@ func show_toast(from_nick: String, text: String) -> void:
 	catcher.add_theme_stylebox_override("pressed", UiStyle.box(Color(1, 1, 1, 0.09), 18, Color(0, 0, 0, 0), 0, 14))
 	catcher.pressed.connect(func() -> void:
 		_remove_toast(card)
-		show_screen("chat", from_nick))
+		show_screen("chat", peer))
 	card.add_child(catcher)
 
 	holder.add_child(card)
@@ -341,35 +460,71 @@ func clear_toasts() -> void:
 
 ## ---------------------------------------------------------------- обновления
 
-## Проверить на сайте, не вышла ли новая версия. Тихо ничего не делает, если
-## сайта нет или интернета нет: обновление — не повод мешать работать.
-func check_update() -> void:
+## Проверить, не вышла ли новая версия: сначала сайт, потом облако (таблица
+## version). Тихо ничего не делает, если ни того, ни другого нет: обновление —
+## не повод мешать работать. answer — кому сообщить, чем кончилось (для кнопки
+## «Проверить обновления» в настройках).
+func check_update(force: bool = false, answer: Callable = Callable()) -> void:
+	if force:
+		_update_checked = false
 	if _update_checked:
 		return
 	# В проверках настоящее облако и сайт не трогаем
 	if OS.get_environment("TNGRAM_PROFILE").strip_edges() != "":
 		return
 	_update_checked = true
+	_update_answer = answer
+	# Страховка: если ни сайт, ни облако не ответили, всё равно сообщаем, что
+	# проверка закончилась — иначе кнопка так и останется «Проверяю…».
+	var watchdog := get_tree().create_timer(4.0)
+	watchdog.timeout.connect(func() -> void: _report_update(Store.remote_version()))
 	var base := Store.site_url()
-	if base.strip_edges() == "":
+	if base.strip_edges() != "":
+		var url := base.trim_suffix("/") + "/" + P.UPDATE_FILE
+		Net.fetch_text(url, func(ok: bool, text: String) -> void:
+			if not ok:
+				return
+			var parsed: Variant = JSON.parse_string(text)
+			if typeof(parsed) == TYPE_DICTIONARY:
+				take_update(parsed as Dictionary))
+	Net.cloud_fetch_version(Store.cloud_url(), Store.cloud_key(), func(ok: bool, info: Dictionary) -> void:
+		if ok:
+			take_update(info))
+
+## Запомнить увиденную версию и, если она новее нашей, сказать об этом.
+func take_update(info: Dictionary) -> void:
+	if not is_inside_tree():
 		return
-	var url := base.trim_suffix("/") + "/" + P.UPDATE_FILE
-	Net.fetch_text(url, func(ok: bool, text: String) -> void:
-		if not ok or not is_inside_tree():
-			return
-		var parsed: Variant = JSON.parse_string(text)
-		if typeof(parsed) != TYPE_DICTIONARY:
-			return
-		var remote := String((parsed as Dictionary).get("version", "")).strip_edges()
-		if remote == "" or P.version_compare(remote, P.APP_VERSION) <= 0:
-			return
-		var fresh := remote != Store.remote_version()
+	var remote := String(info.get("version", "")).strip_edges()
+	var url := String(info.get("url", "")).strip_edges()
+	if url != "":
+		Store.set_update_url(url)
+	if remote == "" or P.version_compare(remote, P.APP_VERSION) <= 0:
+		_report_update(remote)
+		return
+	# Держим самый свежий из увиденных номеров: сайт и облако могут ответить врозь
+	if P.version_compare(remote, Store.remote_version()) > 0:
 		Store.set_remote_version(remote)
-		if fresh:
-			Sfx.play("notice")
-			show_toast(Loc.t("update_title"), Loc.tf("update_toast", [remote]))
-		if screen != null and is_instance_valid(screen) and screen.has_method("rebuild"):
-			screen.rebuild())
+	var already := remote == Store.last_seen_version()
+	Store.set_last_seen_version(remote)
+	if not already:
+		Sfx.play("notice")
+		show_toast(Loc.t("update_title"), Loc.tf("update_toast", [remote]))
+	if screen != null and is_instance_valid(screen) and screen.has_method("rebuild"):
+		screen.rebuild()
+	_report_update(remote)
+
+func _report_update(remote: String) -> void:
+	if _update_answer.is_valid():
+		var said := _update_answer
+		_update_answer = Callable()
+		said.call(remote)
+
+## Открыть страницу обновления в браузере (кнопка «Обновить»)
+func open_update() -> void:
+	var url := Store.update_url()
+	if url.strip_edges() != "":
+		OS.shell_open(url)
 
 ## Открыть сайт приложения в браузере (кнопка «Обновиться»)
 func open_site() -> void:
