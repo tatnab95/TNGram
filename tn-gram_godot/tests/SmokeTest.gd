@@ -1214,6 +1214,35 @@ func _ready() -> void:
 	Store.peer_seen = {}
 	Store.save_data()
 
+	# -------------------------------------- 15з. Уведомления и обновления (версия 1.8)
+	check("версия поднята до 1.8", Protocol.APP_VERSION == "1.8", Protocol.APP_VERSION)
+	check("ссылка на установщик известна",
+		Protocol.apk_url() == Protocol.SITE_URL + "TNGram.apk", Protocol.apk_url())
+	check("в списке изменений первая — 1.8",
+		String((Protocol.CHANGELOG[0] as Dictionary).get("version", "")) == "1.8")
+	# Телефонные уведомления живут только на телефоне: на компьютере (и в headless-
+	# проверках) они честно отвечают «нет» и ничего не делают.
+	check("телефонные уведомления работают только на телефоне", not TnAndroidNotify.available())
+	check("попытка показать уведомление на компьютере безопасна",
+		not TnAndroidNotify.post("админ", "Заголовок", "Текст"))
+	TnAndroidNotify.cancel("админ")  # не должен упасть
+	TnAndroidNotify.ensure_permission()  # на компьютере просто выйдет «нет», без падения
+	check("вызовы уведомлений на компьютере безопасны", true)
+	# Названия канала уведомлений подписаны на двух языках.
+	var saved_lang := Loc.lang
+	Loc.lang = "ru"
+	var ru_channel := Loc.t("notify_channel")
+	var ru_os_notify := Loc.t("settings_notify_os_android")
+	Loc.lang = "en"
+	var en_channel := Loc.t("notify_channel")
+	var en_os_notify := Loc.t("settings_notify_os_android")
+	Loc.lang = saved_lang
+	check("канал уведомлений подписан на двух языках",
+		ru_channel == "Сообщения" and en_channel == "Messages", ru_channel + " / " + en_channel)
+	check("настройка телефона подписана на двух языках",
+		ru_os_notify == "Уведомления телефона" and en_os_notify == "Phone notifications",
+		ru_os_notify + " / " + en_os_notify)
+
 	# ---------------------------------------------------------- 16. Итог и уборка
 	Store.delete_account("тест")
 	check("аккаунт удаляется", not Store.account_exists("тест"))

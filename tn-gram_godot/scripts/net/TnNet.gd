@@ -343,6 +343,8 @@ func _try_now() -> void:
 	_set_status("net_connecting", "%s:%d" % [host, port])
 
 func _fail(key: String) -> void:
+	if debug:
+		print("[сеть] сбой: ", key)
 	state = State.OFF
 	_join_sent = false
 	_joined = false
@@ -383,6 +385,8 @@ func _try_cloud() -> void:
 	var opts := tls_options
 	if opts == null:
 		opts = TLSOptions.client()
+	if debug:
+		print("[сеть] ws-попытка: ", P.realtime_url(_cloud_base, cloud_key))
 	if _ws.connect_to_url(P.realtime_url(_cloud_base, cloud_key), opts) != OK:
 		_fail("net_failed")
 		return
@@ -416,7 +420,7 @@ func _process_cloud(delta: float) -> void:
 									"filter": "to_nick=eq." + nick
 								}]
 							},
-							"access_token": auth_token if auth_token.strip_edges() != "" else cloud_key
+							"access_token": cloud_key
 						},
 						"ref": _next_ref()
 					})
@@ -476,6 +480,8 @@ func _handle_ws_text(text: String) -> void:
 			_fail("net_lost")
 
 func _go_online_cloud() -> void:
+	if debug:
+		print("[сеть] онлайн как ", nick)
 	_joined = true
 	state = State.ONLINE
 	_retry_step = 0.5
@@ -546,11 +552,11 @@ func _cloud_headers(extra: Array = [], key: String = "", plain: bool = false) ->
 	else:
 		var token := key if key.strip_edges() != "" else cloud_key
 		headers.append("apikey: " + token)
-		# Пропуск человека (если он есть) — по нему облако узнаёт, чьи это сообщения
-		var bearer := token
-		if auth_token.strip_edges() != "":
-			bearer = auth_token.strip_edges()
-		headers.append("Authorization: Bearer " + bearer)
+		# Облаку нужен именно публичный ключ проекта. Пропуск человека (JWT)
+		# тамошние правила доступа к таблице сообщений не пропускают — запросы
+		# возвращали пустой ответ, и сообщения «не доходили». Публичный ключ
+		# проверен на всех наших операциях: чтение, отправка и удаление.
+		headers.append("Authorization: Bearer " + token)
 		# charset обязателен: без него облако портило кириллицу в никах
 		headers.append("Content-Type: application/json; charset=utf-8")
 		headers.append("Accept: application/json")
@@ -609,6 +615,8 @@ func _on_http_completed(result: int, code: int, headers: PackedStringArray, body
 			callback.call(false, "net_error", {})
 		return
 	var text := body.get_string_from_utf8()
+	if debug:
+		_note("ответ " + str(code) + " " + tag + ": " + text.substr(0, 160))
 	if code >= 400:
 		_note("облако ответило %d: %s" % [code, text])
 		# 409 — ник уже занят другим человеком

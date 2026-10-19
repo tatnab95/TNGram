@@ -40,13 +40,34 @@ const GROUP_MAX_MEMBERS := 32
 const GROUP_TITLE_MAX := 32
 
 ## ---- Версия и обновления ----
-const APP_VERSION := "1.7"
+const APP_VERSION := "1.8"
 
 const VERSION_TABLE := "version"
 const SITE_URL := "https://tatnab95.github.io/TNGram/"
 const UPDATE_FILE := "version.json"
+## Установщик Android лежит прямо на сайте: с телефона его можно скачать
+## без компьютера — кнопкой «Обновить» в приложении или ссылкой на странице.
+const APK_FILE := "TNGram.apk"
+
+## Прямая ссылка на установщик Android.
+static func apk_url() -> String:
+	return SITE_URL + APK_FILE
 
 const CHANGELOG := [
+	{
+		"version": "1.8",
+		"date": "19.10.2026",
+		"ru": [
+			"Уведомления на телефоне: новое сообщение видно в шторке — приложение может быть свёрнуто.",
+			"Обновление без компьютера: кнопка «Обновить» сразу скачивает установщик, ставится поверх старой версии — переписка сохраняется.",
+			"Сайт обновился: скачать приложение можно прямо со страницы."
+		],
+		"en": [
+			"Phone notifications: a new message shows in the shade — the app can stay minimized.",
+			"Update without a computer: the \"Update\" button downloads the installer right away; it installs over the old version — your chats are kept.",
+			"The site is updated: you can download the app straight from the page."
+		]
+	},
 	{
 		"version": "1.7",
 		"date": "19.10.2026",

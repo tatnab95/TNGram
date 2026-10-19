@@ -21,6 +21,9 @@ mono_crash.*.json
 
 # Export outputs
 *.exe
-build/
+**/build/*
+# ...но текстовые инструкции, SQL-доки и батарейки в build/ — часть проекта
+!**/build/*.txt
+!**/build/*.bat
 # Uncomment if your project does not version PCK files as runtime dependencies.
 # *.pck

@@ -105,6 +105,9 @@ const STRINGS := {
 		"settings_notify_hint": "Когда приходит сообщение, в углу появляется карточка. Щелчок по ней открывает чат.",
 		"settings_notify_os": "Уведомления Windows",
 		"settings_notify_os_hint": "Показывать системное уведомление, когда окно свёрнуто или не в фокусе. Его видно поверх других программ.",
+		"settings_notify_os_android": "Уведомления телефона",
+		"settings_notify_os_android_hint": "Показывать уведомление в шторке телефона, когда приложение свёрнуто. Телефон один раз спросит разрешение.",
+		"notify_channel": "Сообщения",
 
 		# --- что нового ---
 		"news_title": "Что нового",
@@ -304,6 +307,9 @@ const STRINGS := {
 		"settings_notify_hint": "When a message arrives, a card appears in the corner. Click it to open the chat.",
 		"settings_notify_os": "Windows notifications",
 		"settings_notify_os_hint": "Show a system notification when the window is minimised or in the background. It appears above other apps.",
+		"settings_notify_os_android": "Phone notifications",
+		"settings_notify_os_android_hint": "Show a notification in the phone's shade while the app is minimised. The phone asks for permission once.",
+		"notify_channel": "Messages",
 
 		# --- что нового ---
 		"news_title": "What's new",

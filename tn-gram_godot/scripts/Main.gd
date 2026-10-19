@@ -40,6 +40,13 @@ func _ready() -> void:
 	apply_aa()
 	build_background()
 	Net.on_message = _on_net_message
+	# В отладочной сборке пишем всю сеть в журнал — видно в logcat (телефон)
+	# и в консоли (компьютер)
+	if OS.is_debug_build():
+		Net.debug = true
+		Net.notice.connect(func(text: String) -> void: print("[сеть] ", text))
+		print("[сеть] запуск: ник=", Store.current_nick, " адрес=", Store.relay_host(),
+			" автоподключение=", Store.relay_auto())
 	# Периодический замер пинга
 	var ping_timer := Timer.new()
 	ping_timer.wait_time = 8.0
@@ -48,6 +55,21 @@ func _ready() -> void:
 	add_child(ping_timer)
 	show_screen("chats" if Store.current_nick != "" else "login", null)
 	check_update()
+	# На телефоне один раз просим разрешение на уведомления (Android 13+).
+	TnAndroidNotify.ensure_permission()
+
+## Когда окно снова в фокусе — убираем уведомление открытого чата из шторки
+## (его уже прочитали). На компьютере метод ничего не делает.
+func _notification(what: int) -> void:
+	var focused := (
+		what == NOTIFICATION_WM_WINDOW_FOCUS_IN
+		or what == NOTIFICATION_APPLICATION_FOCUS_IN
+		or what == NOTIFICATION_APPLICATION_RESUMED
+	)
+	if focused:
+		var peer := current_peer()
+		if peer != "":
+			TnAndroidNotify.cancel(peer)
 
 func _ping_tick() -> void:
 	if not is_inside_tree():
@@ -203,6 +225,8 @@ func send_group_message(key: String, text: String) -> bool:
 
 ## Входящее сообщение из сети: сохраняем у себя и только тогда подтверждаем — сервер удалит.
 func _on_net_message(from_nick: String, text: String, ts: int, net_id: String) -> bool:
+	if OS.is_debug_build():
+		print("[сеть] входящее от ", from_nick, ": ", text)
 	var group := P.decode_group(text)
 	if not group.is_empty():
 		return _take_group_message(from_nick, group, ts, net_id)
@@ -229,7 +253,12 @@ func _take_group_message(from_nick: String, group: Dictionary, ts: int, net_id: 
 ## Выйти на связь, если это включено в настройках и мы уже вошли
 func maybe_connect() -> void:
 	if Store.current_nick == "" or not Store.relay_auto():
+		if OS.is_debug_build():
+			print("[сеть] подключение пропущено: ник=", Store.current_nick,
+				" автоподключение=", Store.relay_auto())
 		return
+	if OS.is_debug_build():
+		print("[сеть] подключаемся: ", Store.relay_host(), " от лица ", Store.current_nick)
 	check_nick()
 	check_update()
 	refresh_session()
@@ -345,9 +374,16 @@ func notify_new_message(from_nick: String, text: String, group_title: String = "
 	var title := peer
 	var body := (from_nick + ": " + text) if in_group else text
 	# Свёрнутое окно или другое приложение поверх — сообщение всё равно заметят:
-	# на Windows всплывает системное уведомление, на телефоне вибрация
-	# (в самом движке статусного уведомления Android нет, вибрация есть).
+	# на телефоне уведомление уходит в шторку, на Windows всплывает системное
+	# уведомление, на телефоне дополнительно вибрация.
 	var hidden := not has_focus()
+	if OS.is_debug_build():
+		print("[уведомления] сообщение: чат=", peer, " свёрнуто=", hidden,
+			" android=", OS.has_feature("android"),
+			" готово=", TnAndroidNotify.available(),
+			" настройка=", Store.notify_os())
+	if Store.notify_os() and hidden and OS.has_feature("android") and TnAndroidNotify.post(peer, title, body):
+		return
 	if Store.notify_os() and hidden and TnNotify.toast(title, body):
 		DisplayServer.window_request_attention()
 		return
@@ -520,8 +556,13 @@ func _report_update(remote: String) -> void:
 		_update_answer = Callable()
 		said.call(remote)
 
-## Открыть страницу обновления в браузере (кнопка «Обновить»)
+## Открыть страницу обновления (кнопка «Обновить»).
+## На телефоне — сразу скачивание установщика: компьютер не нужен,
+## готовый APK скачается с сайта и встанет поверх старой версии.
 func open_update() -> void:
+	if OS.has_feature("android"):
+		OS.shell_open(P.apk_url())
+		return
 	var url := Store.update_url()
 	if url.strip_edges() != "":
 		OS.shell_open(url)

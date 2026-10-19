@@ -1,0 +1,108 @@
+КАК СОБРАТЬ ВЕРСИЮ ДЛЯ ANDROID (телефон)
+
+Инструкция соответствует тому, как APK уже собирался на этом компьютере.
+Рабочая схема: Android Studio (он же источник Java и Android SDK) + Godot.
+Gradle НЕ нужен — экспорт идёт без него.
+
+Последняя собранная версия: 1.8 (versionCode 7) — build\TNGram.apk.
+Номер версии лежит в двух местах, менять их надо вместе:
+  - export_presets.cfg        version/name="1.8", version/code=7
+  - scripts/net/Protocol.gd   APP_VERSION := "1.8"
+  (version/code на телефоне — номер обновления: он должен расти с каждым выпуском)
+
+Программы, которые уже стоят на этом компьютере:
+  - Android Studio:  C:\Program Files\Android\Android Studio
+  - Java внутри неё: C:\Program Files\Android\Android Studio\jbr  (её же называют JBR)
+  - Android SDK:     C:\Users\tatnab\AppData\Local\Android\Sdk
+
+Если пересобирать на ДРУГОМ компьютере — поставь Android Studio с сайта
+https://developer.android.com/studio (она сразу спрашивает, ставить ли SDK).
+Отдельный JDK ставить не нужно: у Android Studio есть своя Java.
+
+====================================================================
+ШАГ 1. Настройки Godot (делается один раз)
+====================================================================
+1. Открой Godot с этим проектом.
+2. Меню: Редактор (Editor) → Настройки редактора (Editor Settings).
+3. Слева выбери "Export" → "Android".
+4. Заполни:
+   - Java SDK Path:
+     C:/Program Files/Android/Android Studio/jbr
+   - Android SDK Path:
+     C:/Users/tatnab/AppData/Local/Android/Sdk
+5. Настройки сохранятся сами.
+
+Проверка: в папке SDK должны быть папки build-tools и platforms
+(появляются автоматически вместе со Studio или через SDK Manager).
+
+====================================================================
+ШАГ 2. Собрать APK
+====================================================================
+Вариант А (через редактор):
+   Проект → Экспорт... → выбираешь слева "Android" →
+   нажимаешь "Экспорт проекта..." → сохраняешь как build/TNGram.apk
+   (для проверки на телефоне достаточно галочки "Debug").
+
+Вариант Б (командой PowerShell, из папки tn-gram_godot):
+   $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+   & "C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe" `
+     --headless --path . --export-debug "Android" "build/TNGram.apk"
+
+Строка JAVA_HOME обязательна: без неё экспорт не находит Java.
+
+С 1.8 собираем всегда вариант Б (с --export-debug): release-ключ (см. конец
+файла) сейчас телефон не принимает, а отладочная подпись ставится спокойно.
+ВАЖНО: обновление ставится поверх старой версии, только если подпись та же.
+Пока отдаём отладочные сборки — новые версии тоже собирай с --export-debug,
+иначе телефон потребует сначала удалить приложение (вместе с историей).
+
+ВАЖНО (связь на телефоне): в настройках экспорта Android обязательно должна
+быть включена галочка «Permissions → Internet». Без неё Android
+запрещает приложению любые сетевые запросы, и на телефоне видно
+«ошибка связи». В preset это строка: permissions/internet=true
+(рядом также permissions/access_network_state=true).
+
+ВАЖНО (уведомления на телефоне): включены галочки «Permissions → Vibrate»
+(вибрация) и «Permissions → Post Notifications» (в preset —
+permissions/post_notifications=true). Само разрешение на уведомления
+приложение спрашивает само при первом запуске (Android 13 и новее).
+Системные уведомления в шторке делает scripts/AndroidNotify.gd — код самого
+проекта, ничего доустанавливать не нужно.
+Плюс в project.godot лежат:
+  [network] tls/ssl_certificates="res://data/cacert.pem"
+  [display] window/handheld/orientation=1     (1 = вертикально)
+Файл data/cacert.pem (корни шифрования) попадает в APK благодаря
+include_filter="data/*.pem" в пресете экспорта.
+
+Готовый файл: build\TNGram.apk — скинь его на телефон (проводом, Telegram,
+Google Drive) и установи. Телефон спросит разрешение «Установка из неизвестных
+источников» — разреши. Подписывается отладочной (debug) ключевой цепочкой —
+для друзей этого достаточно.
+
+После сборки положи свежий APK ещё и на сайт — тогда телефон сможет скачать
+обновление сам, без компьютера:
+   copy build\TNGram.apk ..\сайт\TNGram.apk
+и запуши репозиторий (GitHub Pages отдаст его по адресу
+https://tatnab95.github.io/TNGram/TNGram.apk — именно этот адрес приложение
+открывает в разделе «Обновления» на телефоне).
+
+====================================================================
+ЕСЛИ ТЕЛЕФОН СТАРЫЙ (не ставится APK)
+====================================================================
+По умолчанию собирается только под современные 64-битные телефоны (arm64).
+Для старого 32-битного телефона в настройках экспорта Android включи галочку
+"armeabi-v7a" (Архитектуры) и собери ещё раз.
+
+====================================================================
+ЕСЛИ НУЖЕН ФАЙЛ ДЛЯ ПУБЛИКАЦИИ (release, а не debug)
+====================================================================
+1. Создай ключ подписи (один раз), в Командной строке:
+   keytool -keyalg RSA -genkeypair -alias tngram -keypass tngram123 ^
+     -keystore C:\Android\tngram.keystore -storepass tngram123 ^
+     -dname "CN=TNGram,O=TNGram,C=RU" -validity 9999 -deststoretype pkcs12
+   (keytool лежит в C:\Program Files\Android\Android Studio\jbr\bin)
+2. В экспорте Android заполни "Release Keystore" = C:\Android\tngram.keystore,
+   User = tngram, Password = tngram123.
+3. Собирай кнопкой "Release".
+
+Запомни пароль от ключа! Без него нельзя будет выпускать обновления приложения.

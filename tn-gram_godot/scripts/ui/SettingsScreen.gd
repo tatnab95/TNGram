@@ -240,8 +240,9 @@ func notify_block() -> PanelContainer:
 	box.add_child(row)
 	box.add_child(hint(Loc.t("settings_notify_hint"), 12))
 
-	# Системные уведомления Windows: их видно, даже когда окно свёрнуто.
-	if OS.has_feature("windows"):
+	# Системные уведомления: на Windows их видно, даже когда окно свёрнуто;
+	# на телефоне они появляются в шторке.
+	if OS.has_feature("windows") or OS.has_feature("android"):
 		var os_row := hbox(8)
 		var os_check := CheckButton.new()
 		os_check.name = "NotifyOs"
@@ -250,12 +251,13 @@ func notify_block() -> PanelContainer:
 		os_check.toggled.connect(func(on: bool) -> void:
 			Store.set_notify_os(on))
 		os_row.add_child(os_check)
-		var os_label := label(Loc.t("settings_notify_os"), 14)
+		var os_key := "settings_notify_os_android" if OS.has_feature("android") else "settings_notify_os"
+		var os_label := label(Loc.t(os_key), 14)
 		os_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		os_row.add_child(os_label)
 		os_row.add_child(spacer())
 		box.add_child(os_row)
-		box.add_child(hint(Loc.t("settings_notify_os_hint"), 12))
+		box.add_child(hint(Loc.t(os_key + "_hint"), 12))
 
 	panel.add_child(box)
 	return panel

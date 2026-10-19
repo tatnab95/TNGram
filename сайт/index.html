@@ -14,7 +14,7 @@
   <!-- Превью при отправке ссылки в мессенджерах -->
   <meta property="og:type" content="website"/>
   <meta property="og:title" content="Тнграм — приватный мессенджер" id="og-title"/>
-  <meta property="og:description" content="Скоро. Приватный мессенджер без хранения переписки на сервере." id="og-desc"/>
+  <meta property="og:description" content="Приватный мессенджер без хранения переписки на сервере. Уже можно скачать." id="og-desc"/>
   <meta property="og:image" content="icon.png"/>
 
   <style>
@@ -162,6 +162,10 @@
       100%{ box-shadow: 0 0 0 0 rgba(var(--a2),0); }
     }
 
+    /* Кнопки под плашкой: «Скачать» и «Как это работает» */
+    .hero-cta{ display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; margin-top: 26px; }
+    .hero-cta .btn-primary, .hero-cta .btn-ghost{ text-decoration: none; }
+
     /* ============================================================================
        6. ОБЩЕЕ ДЛЯ СЕКЦИЙ
        ============================================================================ */
@@ -243,6 +247,12 @@
     .platform svg{ width: 26px; height: 26px; flex: none; color: var(--text); }
     .platform .p-name{ display: block; font-weight: 600; font-size: 16px; }
     .platform .p-tag{ display: block; font-size: 13px; color: var(--muted); }
+    a.platform{ text-decoration: none; color: inherit; }
+    .platform .p-get{
+      margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+      font-size: 14px; font-weight: 700; color: rgb(var(--a2)); white-space: nowrap;
+    }
+    .platform .p-get svg{ width: 16px; height: 16px; color: rgb(var(--a2)); }
 
     /* ============================================================================
        9. КАК ЭТО РАБОТАЕТ: 3 ШАГА + СРАВНЕНИЕ
@@ -541,6 +551,13 @@
         <p class="slogan" data-i18n="hero.slogan"></p>
         <p class="sub" data-i18n="hero.sub"></p>
         <div class="badge"><span class="dot" aria-hidden="true"></span><span data-i18n="hero.badge"></span></div>
+        <div class="hero-cta">
+          <a class="btn-primary" href="TNGram.apk" download data-i18n="hero.download"></a>
+          <a class="btn-ghost" href="#how">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            <span data-i18n="hero.howLink"></span>
+          </a>
+        </div>
       </div>
     </section>
 
@@ -786,7 +803,9 @@
         title: "Тнграм",
         slogan: "Приватный мессенджер. Сообщение уходит на сервер, доставляется получателю — и сразу удаляется с сервера.",
         sub: "Переписка остаётся только у тебя. Без номера телефона, без лишних следов.",
-        badge: "Скоро"
+        badge: "Версия 1.8 — уже можно скачать",
+        download: "Скачать для Android",
+        howLink: "Как это работает"
       },
       about: {
         eyebrow: "О мессенджере",
@@ -801,21 +820,27 @@
           { title: "Максимальная приватность",
             text: "Сообщение уходит на сервер, передаётся получателю и после доставки удаляется с сервера." },
           { title: "Всё хранится на твоём устройстве",
-            text: "История переписки живёт только на вашем устройстве — удалить её можно в любой момент." },
-          { title: "Регистрация без номера телефона",
-            text: "Никакого номера телефона и лишних данных — только аккаунт, который принадлежит вам." },
-          { title: "Серверу нечего отдавать",
-            text: "Сервер не хранит переписку, поэтому по запросу передать просто нечего." },
-          { title: "Современный визуал",
-            text: "Красивые темы оформления, аккуратная типографика и плавные анимации." }
+            text: "История переписки живёт только на ваших устройствах — удалить её можно в любой момент. И без номера телефона." },
+          { title: "Групповые чаты",
+            text: "Собери несколько человек в один чат: видно, кто и когда написал, а ответ доходит до всех." },
+          { title: "Уведомления в шторке",
+            text: "Новое сообщение видно в уведомлениях телефона, даже когда приложение свёрнуто." },
+          { title: "Красиво и по-своему",
+            text: "Три темы оформления, цветные аватарки, плавные анимации и удобная прокрутка." }
         ]
       },
       platforms: {
         eyebrow: "Платформы",
-        title: "Где будет Тнграм",
-        lead: "Планируем выпустить на всех основных платформах. Сроков пока не называем — чтобы не обещать лишнего.",
+        title: "Где работает Тнграм",
+        lead: "Приложение для телефона уже можно скачать — кнопкой выше или здесь. Обновления выходят по мере готовности.",
         tag: "Планируется",
-        items: ["Android", "Windows 11", "Linux", "Веб-версия"]
+        download: "Скачать",
+        items: [
+          { name: "Android",    tag: "Версия 1.8 · установщик APK", href: "TNGram.apk" },
+          { name: "Windows 11", tag: "Версия 1.8 · готово",          href: "" },
+          { name: "Linux",      tag: "Планируется",                  href: "" },
+          { name: "Веб-версия", tag: "Планируется",                  href: "" }
+        ]
       },
       how: {
         eyebrow: "Как это работает",
@@ -876,16 +901,16 @@
         eyebrow: "Вопросы",
         title: "Частые вопросы",
         items: [
-          { q: "Когда выйдет мессенджер?",
-            a: "Даты пока нет. Сейчас реализована только передача сообщений. Чтобы узнать первым, подпишись на обновления внизу страницы." },
+          { q: "Это уже работает?",
+            a: "Да. Скачай приложение кнопкой на этом сайте, создай аккаунт (без номера телефона) и пиши кому угодно." },
+          { q: "Как обновиться до новой версии?",
+            a: "На телефоне: открой приложение — если вышла новая версия, нажми «Обновить», установщик скачается сам. Компьютер не нужен." },
           { q: "Что если сервер упадёт?",
-            a: "Мы хотим, чтобы сообщения не терялись: пока сообщение не передано, оно остаётся на твоём устройстве и отправится, когда сервер снова будет доступен." },
+            a: "Сообщения не теряются: пока сообщение не доставлено, оно остаётся на твоём устройстве и отправится, когда сервер снова будет доступен." },
           { q: "Что будет при смене телефона?",
             a: "Честно: переписка хранится только на устройстве, поэтому сама она не перенесётся. Мы думаем над аккуратным способом переноса — чтобы копии при этом не оказались на сервере." },
           { q: "Можно ли восстановить переписку?",
             a: "Нет. Если удалить переписку или потерять устройство, восстановить её нельзя — на сервере копии нет. Это и есть цена приватности." },
-          { q: "Нужен ли номер телефона?",
-            a: "Нет. Аккаунт создаётся без номера телефона и без списка контактов." },
           { q: "Увидят ли переписку по запросу?",
             a: "Сервер не хранит переписку, поэтому передать по запросу нечего. То, что уже доставлено, остаётся только на устройствах участников." }
         ]
@@ -893,19 +918,20 @@
       roadmap: {
         eyebrow: "Статус",
         title: "Дорожная карта",
-        lead: "Мессенджер ещё в разработке. Даты выхода пока нет, анонсов тоже пока нет.",
+        lead: "Мессенджер уже работает и обновляется. Следить за новостями можно здесь.",
         chips: { done: "Готово", progress: "В работе", next: "Дальше" },
         items: [
           { status: "done",     title: "Передача сообщений", text: "Сообщение уходит, доставляется и удаляется с сервера." },
-          { status: "progress", title: "Стабильность и скорость", text: "Работаем над тем, чтобы передача была быстрой и надёжной." },
-          { status: "next",     title: "Приложения для Android и Windows", text: "Планируем клиенты для телефона и компьютера." },
-          { status: "next",     title: "Групповые чаты, фото и файлы", text: "Переписки с несколькими людьми и вложения." },
-          { status: "next",     title: "Темы оформления", text: "Несколько тем на выбор — как в демонстрации выше." }
+          { status: "done",     title: "Приложения для Android и Windows", text: "Уже можно скачать и пользоваться." },
+          { status: "done",     title: "Групповые чаты и темы оформления", text: "Общие чаты с несколькими людьми и три темы на выбор." },
+          { status: "done",     title: "Уведомления", text: "Сообщение видно в шторке телефона и в уведомлениях Windows." },
+          { status: "progress", title: "Фото и файлы", text: "Пересылка вложений — в работе." },
+          { status: "next",     title: "Перенос переписки", text: "Аккуратный перенос истории при смене устройства." }
         ],
         rows: [
-          { label: "Что уже готово", value: "Передача сообщений", accent: true },
-          { label: "Дата выхода",    value: "Пока не известна" },
-          { label: "Анонсы",         value: "Пока нет" }
+          { label: "Уже работает", value: "Полная версия 1.8", accent: true },
+          { label: "Скачать",      value: "Android — кнопкой на этом сайте" },
+          { label: "Что дальше",   value: "Фото и файлы" }
         ]
       },
       subscribe: {
@@ -926,7 +952,7 @@
         github: "Открытый код",
         linksHint: "Ссылки пока не добавлены."
       },
-      footer: { tagline: "Скоро" }
+      footer: { tagline: "Уже работает" }
     },
     en: {
       meta: {
@@ -938,7 +964,9 @@
         title: "Tngram",
         slogan: "A private messenger. A message goes to the server, reaches the recipient — and is deleted from the server right away.",
         sub: "Your chats stay with you only. No phone number, no unnecessary traces.",
-        badge: "Coming soon"
+        badge: "Version 1.8 — available now",
+        download: "Download for Android",
+        howLink: "How it works"
       },
       about: {
         eyebrow: "The messenger",
@@ -953,21 +981,27 @@
           { title: "Maximum privacy",
             text: "A message goes to the server, reaches the recipient and is deleted from the server after delivery." },
           { title: "Everything stays on your device",
-            text: "Your chat history lives only on your device — you can delete it at any moment." },
-          { title: "Sign up without a phone number",
-            text: "No phone number and no extra data — just an account that belongs to you." },
-          { title: "Nothing to hand over",
-            text: "The server does not store your chats, so there is simply nothing to give on request." },
-          { title: "Modern look",
-            text: "Beautiful themes, tidy typography and smooth animations." }
+            text: "Your chat history lives only on your devices — you can delete it at any moment. And no phone number is needed." },
+          { title: "Group chats",
+            text: "Gather several people into one chat: you can see who wrote and when, and a reply reaches everyone." },
+          { title: "Notifications in the shade",
+            text: "A new message shows up in the phone's notifications, even when the app is minimized." },
+          { title: "Beautiful and yours",
+            text: "Three themes, colored avatars, smooth animations and comfortable scrolling." }
         ]
       },
       platforms: {
         eyebrow: "Platforms",
-        title: "Where Tngram will live",
-        lead: "We plan to ship on all major platforms. No dates yet — we don't want to promise too much.",
+        title: "Where Tngram works",
+        lead: "The phone app can be downloaded right now — with the button above or here. Updates ship as they are ready.",
         tag: "Planned",
-        items: ["Android", "Windows 11", "Linux", "Web version"]
+        download: "Download",
+        items: [
+          { name: "Android",    tag: "Version 1.8 · APK installer", href: "TNGram.apk" },
+          { name: "Windows 11", tag: "Version 1.8 · ready",         href: "" },
+          { name: "Linux",      tag: "Planned",                     href: "" },
+          { name: "Web version",tag: "Planned",                     href: "" }
+        ]
       },
       how: {
         eyebrow: "How it works",
@@ -1028,16 +1062,16 @@
         eyebrow: "Questions",
         title: "Frequently asked",
         items: [
-          { q: "When will the messenger be released?",
-            a: "No date yet. Right now only message delivery is implemented. To hear first, subscribe to updates at the bottom of the page." },
+          { q: "Does it already work?",
+            a: "Yes. Download the app with the button on this site, create an account (no phone number needed) and message anyone." },
+          { q: "How do I update to the new version?",
+            a: "On your phone: open the app — if a new version is out, tap \"Update\" and the installer downloads by itself. No computer needed." },
           { q: "What if the server goes down?",
-            a: "We want messages never to be lost: until a message is delivered, it stays on your device and will be sent once the server is available again." },
+            a: "Messages are never lost: until a message is delivered, it stays on your device and will be sent once the server is available again." },
           { q: "What happens when I change my phone?",
             a: "Honestly: your chats are stored on the device only, so they won't move over by themselves. We are working on a careful way to transfer them — without copies ending up on the server." },
           { q: "Can I recover my chats?",
             a: "No. If you delete your chats or lose your device, there is no way to recover them — the server keeps no copy. That is the price of privacy." },
-          { q: "Do I need a phone number?",
-            a: "No. An account is created without a phone number and without your contact list." },
           { q: "Can my chats be handed over on request?",
             a: "The server does not store your chats, so there is nothing to hand over. What has already been delivered stays on the participants' devices only." }
         ]
@@ -1045,19 +1079,20 @@
       roadmap: {
         eyebrow: "Status",
         title: "Roadmap",
-        lead: "The messenger is still in development. There is no release date yet, and no announcements either.",
+        lead: "The messenger already works and keeps improving. You can follow the news right here.",
         chips: { done: "Done", progress: "In progress", next: "Next" },
         items: [
           { status: "done",     title: "Message delivery", text: "A message is sent, delivered and deleted from the server." },
-          { status: "progress", title: "Stability and speed", text: "We are making delivery fast and reliable." },
-          { status: "next",     title: "Apps for Android and Windows", text: "Clients for phones and computers are planned." },
-          { status: "next",     title: "Group chats, photos and files", text: "Conversations with several people and attachments." },
-          { status: "next",     title: "Themes", text: "Several themes to choose from — as in the demo above." }
+          { status: "done",     title: "Apps for Android and Windows", text: "Available to download and use right now." },
+          { status: "done",     title: "Group chats and themes", text: "Shared chats with several people and three themes to pick from." },
+          { status: "done",     title: "Notifications", text: "A message shows in the phone's shade and in Windows notifications." },
+          { status: "progress", title: "Photos and files", text: "Sending attachments — work in progress." },
+          { status: "next",     title: "Chat transfer", text: "A careful way to move your history to a new device." }
         ],
         rows: [
-          { label: "Already working", value: "Message delivery", accent: true },
-          { label: "Release date",    value: "Not known yet" },
-          { label: "Announcements",   value: "None yet" }
+          { label: "Already working", value: "Full version 1.8", accent: true },
+          { label: "Download",        value: "Android — with the button on this site" },
+          { label: "What's next",     value: "Photos and files" }
         ]
       },
       subscribe: {
@@ -1078,7 +1113,7 @@
         github: "Source code",
         linksHint: "No links added yet."
       },
-      footer: { tagline: "Coming soon" }
+      footer: { tagline: "Works today" }
     }
   };
   /* Иконки карточек возможностей (порядок совпадает с features.items) */
@@ -1146,14 +1181,21 @@
   /* Платформы */
   function renderPlatforms(lang){
     const p = TEXTS[lang].platforms;
-    $('#platform-list').innerHTML = p.items.map((name, i) => `
-      <div class="platform reveal" style="--d:${i * 70}ms">
+    $('#platform-list').innerHTML = p.items.map((item, i) => {
+      const name = typeof item === 'string' ? item : item.name;
+      const tag  = typeof item === 'string' ? p.tag   : item.tag;
+      const href = typeof item === 'string' ? ''      : (item.href || '');
+      const inner = `
         ${PLATFORM_ICONS[i] || ''}
         <div>
           <span class="p-name">${name}</span>
-          <span class="p-tag">${p.tag}</span>
+          <span class="p-tag">${tag}</span>
         </div>
-      </div>`).join('');
+        ${href ? `<span class="p-get" aria-hidden="true">${p.download}${ARROW_ICON}</span>` : ''}`;
+      return href
+        ? `<a class="platform reveal" style="--d:${i * 70}ms" href="${href}" download>${inner}</a>`
+        : `<div class="platform reveal" style="--d:${i * 70}ms">${inner}</div>`;
+    }).join('');
   }
 
   /* Три шага */
