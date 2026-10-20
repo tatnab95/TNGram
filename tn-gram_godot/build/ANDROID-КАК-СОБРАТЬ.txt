@@ -4,10 +4,10 @@
 Рабочая схема: Android Studio (он же источник Java и Android SDK) + Godot.
 Gradle НЕ нужен — экспорт идёт без него.
 
-Последняя собранная версия: 1.8 (versionCode 7) — build\TNGram.apk.
+Последняя собранная версия: 2.0 (versionCode 8) — build\TNGram.apk.
 Номер версии лежит в двух местах, менять их надо вместе:
-  - export_presets.cfg        version/name="1.8", version/code=7
-  - scripts/net/Protocol.gd   APP_VERSION := "1.8"
+  - export_presets.cfg        version/name="2.0", version/code=8
+  - scripts/net/Protocol.gd   APP_VERSION := "2.0"
   (version/code на телефоне — номер обновления: он должен расти с каждым выпуском)
 
 Программы, которые уже стоят на этом компьютере:

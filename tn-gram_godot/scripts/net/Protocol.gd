@@ -40,7 +40,24 @@ const GROUP_MAX_MEMBERS := 32
 const GROUP_TITLE_MAX := 32
 
 ## ---- Версия и обновления ----
-const APP_VERSION := "1.8"
+const APP_VERSION := "2.0"
+
+## ---- Слабый ИИ: живёт только на устройстве, работает без интернета ----
+## Особый адрес чата: не ник и не группа. В список людей он не попадает
+## и на сервер никогда не уходит — только локальная переписка.
+const AI_KEY := "__ai__"
+
+static func is_ai_key(value: String) -> bool:
+	return nick_key(value) == AI_KEY
+
+## Показывать ли чат с ИИ в списке. Только телефон — так задумано:
+## локальный помощник нужен, когда интернета нет или он дорог.
+## Переменная TNGRAM_AI_ALL=1 включает его всюду: ей пользуются автопроверки,
+## чтобы прогнать телефонный сценарий на компьютере.
+static func is_ai_enabled() -> bool:
+	if OS.get_environment("TNGRAM_AI_ALL").strip_edges() == "1":
+		return true
+	return OS.has_feature("android")
 
 const VERSION_TABLE := "version"
 const SITE_URL := "https://tatnab95.github.io/TNGram/"
@@ -54,6 +71,28 @@ static func apk_url() -> String:
 	return SITE_URL + APK_FILE
 
 const CHANGELOG := [
+	{
+		"version": "2.0",
+		"date": "20.10.2026",
+		"ru": [
+			"Новый вид переписки: аккуратные пузыри с загнутым углом, отдельная шапка чата и своя панель ввода — читать и писать стало легко.",
+			"Анимации по всему приложению: экраны появляются плавно, новые сообщения проступают без рывков, список чатов оживает, фон мягко дышит.",
+			"Слабый ИИ-чат: отвечает на «привет как дела», помнит твоё имя, считает примеры, знает время — и всё без интернета, прямо на телефоне.",
+			"Кнопка «вниз» в переписке: один тап — и ты снова у последних сообщений.",
+			"Пузыри стали контрастнее: текст, время и имя автора читаются с первого взгляда, длинные тексты не распирают экран.",
+			"Телефон вибрирует при отправке сообщения.",
+			"Доставку проверили от и до: письма из облака доходят в обе стороны, даже если приложение долго было свёрнуто."
+		],
+		"en": [
+			"A new look for chats: neat bubbles with a tucked corner, a proper chat header and its own input bar — easy to read and easy to type.",
+			"Animations everywhere: screens fade in smoothly, new messages appear without flicker, the chat list comes alive, the background breathes gently.",
+			"A weak AI chat: answers \"hello, how are you\", remembers your name, does simple math and knows the time — all offline, right on your phone.",
+			"A \"jump to latest\" button in a chat: one tap and you are back at the newest messages.",
+			"Clearer bubbles: text, time and the author's name read at a glance; long texts no longer blow up the screen.",
+			"The phone vibrates when you send a message.",
+			"Delivery checked end to end: cloud messages arrive both ways even after the app stayed minimized for a long time."
+		]
+	},
 	{
 		"version": "1.8",
 		"date": "19.10.2026",

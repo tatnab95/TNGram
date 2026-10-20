@@ -68,6 +68,14 @@ const STRINGS := {
 		"chat_delete_confirm": "Удалить всю переписку с %s? Восстановить её будет нельзя.",
 		"chat_with": "Чат с ",
 
+		# --- слабый ИИ (только телефон, работает без интернета) ---
+		"ai_title": "ИИ-помощник",
+		"ai_subtitle": "Слабый ИИ · работает без интернета",
+		"ai_status": "слабый ИИ · офлайн",
+		"ai_note": "Помощник отвечает по-своему: вся переписка хранится только на этом устройстве.",
+		"ai_typing": "печатает…",
+		"ai_empty": "Напиши «привет» — помощник ответит даже без интернета.",
+
 		# --- настройки ---
 		"settings": "Настройки",
 		"settings_lang": "Язык",
@@ -269,6 +277,14 @@ const STRINGS := {
 		"chat_delete": "Delete chat",
 		"chat_delete_confirm": "Delete the whole conversation with %s? It cannot be restored.",
 		"chat_with": "Chat with ",
+
+		# --- weak AI (phone only, works offline) ---
+		"ai_title": "AI buddy",
+		"ai_subtitle": "Weak AI · works offline",
+		"ai_status": "weak AI · offline",
+		"ai_note": "The buddy replies in its own way: the whole chat stays on this device only.",
+		"ai_typing": "typing…",
+		"ai_empty": "Say \"hello\" — the buddy answers even without the internet.",
 
 		# --- настройки ---
 		"settings": "Settings",

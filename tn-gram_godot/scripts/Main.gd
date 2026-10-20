@@ -122,6 +122,8 @@ func _peer_nick() -> String:
 	if current_id != "chat" or current_arg == null:
 		return ""
 	var key := String(current_arg)
+	if P.is_ai_key(key):
+		return ""
 	return "" if Store.is_group(key) else key
 
 ## На телефоне экран вытянут вертикально, а размеры в приложении считаются
@@ -179,6 +181,8 @@ func show_screen(id: String, arg: Variant = null) -> void:
 	add_child(node)
 	node.navigate.connect(_on_navigate)
 	screen = node
+	# Плавное появление экрана (на телефоне ещё и подъём снизу)
+	Anim.screen_in(node)
 
 	# Всплывающие уведомления всегда поверх экрана
 	if toast_layer != null and is_instance_valid(toast_layer):
@@ -197,7 +201,15 @@ func _on_navigate(target: String, arg: Variant) -> void:
 
 ## Отправить сообщение: сначала сохраняем у себя, потом пробуем отправить по сети.
 ## Если собеседник — группа, письмо уходит всем участникам (см. send_group_message).
+## Собеседник «ИИ-помощник» — локальный: ответ рождается прямо в приложении,
+## сеть ему не нужна вообще.
 func send_message(peer: String, text: String) -> bool:
+	if P.is_ai_key(peer):
+		if not Store.send_message(peer, text):
+			return false
+		Sfx.play("sent")
+		_ai_reply_later(text)
+		return true
 	if Store.is_group(peer):
 		return send_group_message(peer, text)
 	if not Store.send_message(peer, text):
@@ -205,6 +217,18 @@ func send_message(peer: String, text: String) -> bool:
 	Sfx.play("sent")
 	Net.send_message(peer, text)
 	return true
+
+## Ответ слабого ИИ: через мгновение в чат приходит локальное сообщение.
+## Если человек уже ушёл из чата — просто загорится значок непрочитанного.
+func _ai_reply_later(asked: String) -> void:
+	var answer := AiBot.reply(asked, Loc.lang)
+	var nick := Store.current_nick
+	var timer := get_tree().create_timer(0.75)
+	timer.timeout.connect(func() -> void:
+		if not is_inside_tree() or nick == "" or Store.current_nick != nick:
+			return
+		if Store.receive_message(P.AI_KEY, answer):
+			Sfx.play("incoming"))
 
 ## Отправить в группу: сохраняем у себя, а каждому участнику уходит копия.
 ## Название группы и её состав едут вместе с текстом — получатель заводит
@@ -355,6 +379,8 @@ func add_blob(anchor: Vector2, size: float, color: Color, strength: float) -> vo
 	blob.offset_top = -size * 0.5
 	blob.offset_bottom = size * 0.5
 	background.add_child(blob)
+	# Фон мягко дышит: пятно медленно покачивается вверх-вниз
+	Anim.breathe(blob, 14.0, 7.0 + randf() * 4.0)
 
 ## ---------------------------------------------------------------- звук
 

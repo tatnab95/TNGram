@@ -5,8 +5,10 @@ var net_line: Label       ## подпись «связь есть/нет»
 var server_line: Label    ## подпись «сервер: облако · пинг 84 мс»
 var list_box: VBoxContainer  ## сюда собираются карточки чатов
 var search_field: LineEdit   ## поиск по нику, названию и последнему сообщению
+var _animate_rows := false   ## первый список появляется с лёгким оживанием
 
 func _ready() -> void:
+	_animate_rows = true
 	build()
 	if not Store.data_changed.is_connected(_on_data_changed):
 		Store.data_changed.connect(_on_data_changed)
@@ -150,6 +152,7 @@ func update_banner(version: String) -> PanelContainer:
 	get_button.add_theme_color_override("font_color", Color("#04121b"))
 	row.add_child(get_button)
 	panel.add_child(row)
+	Anim.fade_in(panel, 0.2)
 	return panel
 
 ## Собрать карточки чатов с учётом поиска. Вызывается и при вводе в поиск.
@@ -159,8 +162,21 @@ func fill_list() -> void:
 	for child in list_box.get_children():
 		child.queue_free()
 	var needle := search_field.text.strip_edges().to_lower() if search_field != null else ""
-	var entries := Store.chat_keys()
 	var shown := 0
+
+	# Чат со слабым ИИ — только на телефоне и всегда первым: он работает
+	# даже без интернета, а переписка хранится прямо на устройстве.
+	if P.is_ai_enabled():
+		var ai_title := Loc.t("ai_title")
+		var ai_last := Store.last_message(P.AI_KEY)
+		var ai_preview := Loc.t("ai_subtitle") if ai_last.is_empty() else String(ai_last.get("text", ""))
+		if needle == "" or ai_title.to_lower().contains(needle) or ai_preview.to_lower().contains(needle):
+			var ai_time := Store.format_time(int(ai_last.get("ts", 0))) if not ai_last.is_empty() else ""
+			list_box.add_child(contact_button(ai_title, ai_preview, ai_time, func() -> void:
+				navigate.emit("chat", P.AI_KEY), false, Store.unread_count(P.AI_KEY)))
+			shown += 1
+
+	var entries := Store.chat_keys()
 	for item in entries:
 		var key := String((item as Dictionary).get("key", ""))
 		var group := bool((item as Dictionary).get("group", false))
@@ -181,6 +197,10 @@ func fill_list() -> void:
 		empty_panel.add_theme_stylebox_override("panel", UiStyle.box(pal()["panel"], 20, pal()["line"], 1, 28))
 		empty_panel.add_child(empty)
 		list_box.add_child(empty_panel)
+	# Первый показ списка оживает; сигналы (присутствие, поиск) не мигают.
+	if _animate_rows:
+		_animate_rows = false
+		Anim.stagger(list_box)
 
 ## Что писать под названием чата
 func preview_text(key: String, group: bool) -> String:

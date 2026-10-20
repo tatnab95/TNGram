@@ -6,32 +6,32 @@ class_name UiStyle
 ## Палитры тем. Меняй значения — интерфейс перекрасится целиком.
 const PALETTES := {
 	"dark": {
-		"bg": Color("#05070a"),
-		"panel": Color(1, 1, 1, 0.055),
-		"panel_strong": Color(1, 1, 1, 0.085),
-		"line": Color(1, 1, 1, 0.10),
-		"text": Color("#f4f7fb"),
-		"muted": Color("#99a3b2"),
+		"bg": Color("#05080d"),
+		"panel": Color(1, 1, 1, 0.062),
+		"panel_strong": Color(1, 1, 1, 0.098),
+		"line": Color(1, 1, 1, 0.12),
+		"text": Color("#f5f8fd"),
+		"muted": Color("#98a3b5"),
 		"a1": Color("#2f7bff"),   # синий
-		"a2": Color("#00e08f")    # зелёный
+		"a2": Color("#10dfa0")    # зелёный
 	},
 	"green": {
 		"bg": Color("#040906"),
-		"panel": Color(1, 1, 1, 0.055),
-		"panel_strong": Color(1, 1, 1, 0.085),
-		"line": Color(1, 1, 1, 0.10),
+		"panel": Color(1, 1, 1, 0.062),
+		"panel_strong": Color(1, 1, 1, 0.098),
+		"line": Color(1, 1, 1, 0.12),
 		"text": Color("#f2fbf6"),
-		"muted": Color("#97b3a6"),
+		"muted": Color("#96b2a5"),
 		"a1": Color("#00c484"),
 		"a2": Color("#8ad62a")
 	},
 	"blue": {
 		"bg": Color("#04060d"),
-		"panel": Color(1, 1, 1, 0.055),
-		"panel_strong": Color(1, 1, 1, 0.085),
-		"line": Color(1, 1, 1, 0.10),
+		"panel": Color(1, 1, 1, 0.062),
+		"panel_strong": Color(1, 1, 1, 0.098),
+		"line": Color(1, 1, 1, 0.12),
 		"text": Color("#f3f5ff"),
-		"muted": Color("#9aa3c0"),
+		"muted": Color("#99a2c0"),
 		"a1": Color("#3b82f6"),
 		"a2": Color("#8b5cf6")
 	}
@@ -107,6 +107,42 @@ static func box(fill: Color, radius: int = 20, border: Color = Color(0, 0, 0, 0)
 	sb.set_content_margin_all(pad)
 	sb.anti_aliasing = true
 	sb.anti_aliasing_size = shape_softness
+	return sb
+
+## Пузырь сообщения в переписке. Свои — градиент акцентных цветов с загнутым
+## правым углом, чужие — стеклянная панель с загнутым левым. Так пузырь
+## читается с первого взгляда и выглядит как в больших мессенджерах.
+static func bubble_box(mine: bool, accent_a: Color, accent_b: Color, panel: Color, line: Color) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.set_corner_radius_all(18)
+	sb.corner_detail = 7
+	sb.anti_aliasing = true
+	sb.anti_aliasing_size = shape_softness
+	sb.content_margin_left = 12.0
+	sb.content_margin_right = 12.0
+	sb.content_margin_top = 8.0
+	sb.content_margin_bottom = 6.0
+	if mine:
+		sb.set_corner_radius_bottom_right(6)
+		sb.bg_color = accent_a
+		var gradient := Gradient.new()
+		gradient.set_color(0, accent_a)
+		gradient.set_color(1, accent_b)
+		var texture := GradientTexture2D.new()
+		texture.gradient = gradient
+		texture.width = 256
+		texture.height = 64
+		texture.fill = GradientTexture2D.FILL_LINEAR
+		texture.fill_from = Vector2(0, 0)
+		texture.fill_to = Vector2(1, 1)
+		sb.gradient = texture
+		sb.gradient_fill_from = Vector2(0, 0)
+		sb.gradient_fill_to = Vector2(1, 1)
+	else:
+		sb.set_corner_radius_bottom_left(6)
+		sb.bg_color = panel
+		sb.set_border_width_all(1)
+		sb.border_color = line
 	return sb
 
 ## Гладкий круг для аватарки. Рисуем крупную текстуру и уменьшаем её — край

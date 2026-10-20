@@ -768,8 +768,8 @@ func _ready() -> void:
 	check("без проверки обновления нет", Store.update_available() == "")
 	Store.set_remote_version("1.1")
 	check("старая версия на сайте — обновления нет", Store.update_available() == "")
-	Store.set_remote_version("1.99")
-	check("новая версия на сайте — предлагаем обновиться", Store.update_available() == "1.99", Store.update_available())
+	Store.set_remote_version("2.99")
+	check("новая версия на сайте — предлагаем обновиться", Store.update_available() == "2.99", Store.update_available())
 	Store.set_remote_version("")
 	check("адрес сайта задан", Store.site_url().begins_with("https://"), Store.site_url())
 
@@ -1214,12 +1214,16 @@ func _ready() -> void:
 	Store.peer_seen = {}
 	Store.save_data()
 
-	# -------------------------------------- 15з. Уведомления и обновления (версия 1.8)
-	check("версия поднята до 1.8", Protocol.APP_VERSION == "1.8", Protocol.APP_VERSION)
+	# -------------------------------------- 15з. Уведомления и обновления (версия 2.0)
+	check("версия поднята до 2.0", Protocol.APP_VERSION == "2.0", Protocol.APP_VERSION)
 	check("ссылка на установщик известна",
 		Protocol.apk_url() == Protocol.SITE_URL + "TNGram.apk", Protocol.apk_url())
-	check("в списке изменений первая — 1.8",
-		String((Protocol.CHANGELOG[0] as Dictionary).get("version", "")) == "1.8")
+	check("в списке изменений первая — 2.0",
+		String((Protocol.CHANGELOG[0] as Dictionary).get("version", "")) == "2.0")
+	var big_ru: Array = (Protocol.CHANGELOG[0] as Dictionary).get("ru", [])
+	var big_en: Array = (Protocol.CHANGELOG[0] as Dictionary).get("en", [])
+	check("обновление 2.0 — большое: пунктов много", big_ru.size() >= 6 and big_en.size() >= 6,
+		"ru=%d en=%d" % [big_ru.size(), big_en.size()])
 	# Телефонные уведомления живут только на телефоне: на компьютере (и в headless-
 	# проверках) они честно отвечают «нет» и ничего не делают.
 	check("телефонные уведомления работают только на телефоне", not TnAndroidNotify.available())
@@ -1242,6 +1246,38 @@ func _ready() -> void:
 	check("настройка телефона подписана на двух языках",
 		ru_os_notify == "Уведомления телефона" and en_os_notify == "Phone notifications",
 		ru_os_notify + " / " + en_os_notify)
+
+	# -------------------------------------- 15и. Слабый ИИ: правила, без интернета
+	# Бот живёт по простым правилам: ответы должны быть, не пустые и осмысленные.
+	AiBot.forget()
+	var ai_hello := AiBot.reply("Привет!", "ru")
+	check("ИИ отвечает на приветствие", ai_hello.strip_edges() != "", ai_hello)
+	var ai_days := AiBot.reply("как дела?", "ru")
+	check("ИИ отвечает про дела", ai_days.strip_edges() != "" and ai_days != ai_hello, ai_days)
+	var ai_math := AiBot.reply("2+2", "ru")
+	check("ИИ считает примеры", ai_math.contains("4"), ai_math)
+	var ai_time := AiBot.reply("который час?", "ru")
+	check("ИИ знает время", ai_time.contains("Сейчас"), ai_time)
+	AiBot.reply("Меня зовут Тестер", "ru")
+	var ai_name := AiBot.reply("как меня зовут?", "ru")
+	check("ИИ помнит имя", ai_name.contains("тестер"), ai_name)
+	AiBot.forget()
+	var ai_fallback := AiBot.reply("абракадабра12345", "ru")
+	check("ИИ не молчит на неизвестное", ai_fallback.strip_edges() != "", ai_fallback)
+	var ai_en := AiBot.reply("hello", "en")
+	check("ИИ отвечает и по-английски", ai_en.strip_edges() != "", ai_en)
+	# Ключ ИИ — не человек и не группа; в списке людей ему делать нечего
+	check("ИИ-ключ не является группой", not Protocol.is_group_key(Protocol.AI_KEY))
+	check("ИИ-ключ узнаётся", Protocol.is_ai_key("__ai__") and not Protocol.is_ai_key("админ"))
+	check("ИИ-чат появляется только на телефоне",
+		OS.has_feature("android") or OS.get_environment("TNGRAM_AI_ALL").strip_edges() == "1"
+			or not Protocol.is_ai_enabled())
+	Store.login("админ", "")
+	Store.send_message(Protocol.AI_KEY, "привет")
+	check("ИИ-чат не считается человеком", not Store.contacts().has(Protocol.AI_KEY))
+	check("ИИ-чат не дублируется в списке чатов", not Store.chat_keys().has(Protocol.AI_KEY))
+	Store.delete_history(Protocol.AI_KEY)
+	check("переписка с ИИ удаляется", Store.messages(Protocol.AI_KEY).is_empty())
 
 	# ---------------------------------------------------------- 16. Итог и уборка
 	Store.delete_account("тест")
