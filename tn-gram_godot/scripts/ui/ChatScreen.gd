@@ -182,6 +182,7 @@ func build() -> void:
 	down_button = Button.new()
 	down_button.text = "↓"
 	down_button.focus_mode = Control.FOCUS_NONE
+	down_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	down_button.custom_minimum_size = Vector2(44, 44)
 	down_button.anchor_left = 1.0
 	down_button.anchor_right = 1.0
@@ -195,8 +196,13 @@ func build() -> void:
 	down_button.add_theme_stylebox_override("hover", UiStyle.box(p["a1"] * Color(1, 1, 1, 0.4), 999, p["a2"], 1, 10))
 	down_button.add_theme_stylebox_override("pressed", UiStyle.box(p["a1"], 999, p["a2"], 1, 10))
 	down_button.add_theme_stylebox_override("focus", UiStyle.box(Color(0, 0, 0, 0), 999, Color(0, 0, 0, 0), 0, 10))
+	down_button.add_theme_stylebox_override("disabled", UiStyle.box(Color(0, 0, 0, 0), 999, Color(0, 0, 0, 0), 0, 10))
+	down_button.add_theme_color_override("font_color", p["text"])
+	down_button.add_theme_color_override("font_hover_color", p["text"])
+	down_button.add_theme_color_override("font_pressed_color", p["text"])
 	down_button.pressed.connect(func() -> void: scroll_to_bottom())
 	down_button.visible = false
+	down_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	stage.add_child(down_button)
 	column.add_child(stage)
 
@@ -277,21 +283,25 @@ func message_row(message: Dictionary) -> Control:
 	var is_ai := P.is_ai_key(peer)
 
 	var row := hbox(0)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if mine:
 		row.add_child(spacer())
 
 	var bubble := PanelContainer.new()
+	bubble.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	# Свои — градиент акцента, чужие — стеклянный; у ИИ обводка зелёная
 	var line_color: Color = p["a2"] * Color(1, 1, 1, 0.45) if is_ai and not mine else p["line"]
 	bubble.add_theme_stylebox_override("panel",
 		UiStyle.bubble_box(mine, p["a1"], p["a1"].lerp(p["a2"], 0.45), p["panel_strong"], line_color))
 
 	var body := vbox(2)
+	body.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	# В группе подписываем, кто написал (в своих пузырях подпись не нужна)
 	var author := String(message.get("from", ""))
 	if not mine and author != "" and Store.is_group(peer):
 		var author_label := label(author, 11, p["a2"])
 		author_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		author_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		body.add_child(author_label)
 	var message_label := label(text, 15, Color("#f7fbff") if mine else p["text"], true)
 	# Ширина пузыря зависит от длины текста и не вылезает за пределы экрана
@@ -303,6 +313,7 @@ func message_row(message: Dictionary) -> Control:
 	var time_label := label(Store.format_time(int(message.get("ts", 0))), 10,
 		Color(1, 1, 1, 0.72) if mine else p["muted"])
 	time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	time_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	body.add_child(time_label)
 
 	bubble.add_child(body)

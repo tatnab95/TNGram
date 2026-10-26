@@ -23,10 +23,6 @@ Loc="*res://scripts/Loc.gd"
 Net="*res://scripts/net/Net.gd"
 Sfx="*res://scripts/Sfx.gd"
 
-[network]
-
-tls/ssl_certificates="res://data/cacert.pem"
-
 [display]
 
 window/size/viewport_width=1100
@@ -35,13 +31,17 @@ window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation=1
 
+[network]
+
+tls/ssl_certificates="res://data/cacert.pem"
+
 [physics]
 
 3d/physics_engine="Jolt Physics"
 
 [rendering]
 
-textures/vram_compression/import_etc2_astc=true
 rendering_device/driver.windows="d3d12"
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
