@@ -49,7 +49,8 @@ func build() -> void:
 
 	# --- язык ---
 	var lang_buttons := hbox(8)
-	lang_buttons.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	lang_buttons.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	lang_buttons.custom_minimum_size.x = 0
 	for code in ["ru", "en"]:
 		lang_buttons.add_child(toggle_button(code.to_upper(), Loc.lang == code, func() -> void:
 			Store.set_lang(code)
@@ -59,7 +60,8 @@ func build() -> void:
 
 	# --- тема ---
 	var theme_buttons := hbox(8)
-	theme_buttons.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	theme_buttons.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	theme_buttons.custom_minimum_size.x = 0
 	for theme_id in ["dark", "green", "blue"]:
 		theme_buttons.add_child(toggle_button(Loc.t("theme_" + theme_id), Store.theme() == theme_id, func() -> void:
 			Store.set_theme(theme_id)

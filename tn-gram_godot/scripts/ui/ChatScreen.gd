@@ -184,6 +184,9 @@ func build() -> void:
 	down_button.focus_mode = Control.FOCUS_NONE
 	down_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	down_button.custom_minimum_size = Vector2(44, 44)
+	down_button.size_flags_horizontal = Control.SIZE_SHRINK_END
+	down_button.size_flags_vertical = Control.SIZE_SHRINK_END
+	down_button.position = Vector2(-54, -54)
 	down_button.anchor_left = 1.0
 	down_button.anchor_right = 1.0
 	down_button.anchor_top = 1.0
@@ -203,6 +206,8 @@ func build() -> void:
 	down_button.pressed.connect(func() -> void: scroll_to_bottom())
 	down_button.visible = false
 	down_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	# Убираем любые лишние обводки/детали
+	down_button.flat = false
 	stage.add_child(down_button)
 	column.add_child(stage)
 
@@ -284,11 +289,13 @@ func message_row(message: Dictionary) -> Control:
 
 	var row := hbox(0)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.custom_minimum_size.x = 0
 	if mine:
 		row.add_child(spacer())
 
 	var bubble := PanelContainer.new()
 	bubble.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	bubble.custom_minimum_size.x = 0
 	# Свои — градиент акцента, чужие — стеклянный; у ИИ обводка зелёная
 	var line_color: Color = p["a2"] * Color(1, 1, 1, 0.45) if is_ai and not mine else p["line"]
 	bubble.add_theme_stylebox_override("panel",
@@ -296,11 +303,13 @@ func message_row(message: Dictionary) -> Control:
 
 	var body := vbox(2)
 	body.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	body.custom_minimum_size.x = 0
 	# В группе подписываем, кто написал (в своих пузырях подпись не нужна)
 	var author := String(message.get("from", ""))
 	if not mine and author != "" and Store.is_group(peer):
 		var author_label := label(author, 11, p["a2"])
 		author_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		author_label.custom_minimum_size.x = 0
 		author_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		body.add_child(author_label)
 	var message_label := label(text, 15, Color("#f7fbff") if mine else p["text"], true)
@@ -314,13 +323,16 @@ func message_row(message: Dictionary) -> Control:
 		Color(1, 1, 1, 0.72) if mine else p["muted"])
 	time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	time_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	time_label.custom_minimum_size.x = 0
 	body.add_child(time_label)
 
 	bubble.add_child(body)
 	row.add_child(bubble)
 
 	if not mine:
-		row.add_child(spacer())
+		var s := spacer()
+		s.custom_minimum_size.x = 0
+		row.add_child(s)
 	return row
 
 func scroll_to_bottom() -> void:

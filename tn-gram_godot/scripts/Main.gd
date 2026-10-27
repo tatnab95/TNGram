@@ -408,12 +408,13 @@ func notify_new_message(from_nick: String, text: String, group_title: String = "
 			" android=", OS.has_feature("android"),
 			" готово=", TnAndroidNotify.available(),
 			" настройка=", Store.notify_os())
-	# На Android уведомление в шторке нужно и когда приложение просто свернуто
+	# На Android уведомление в шторке нужно всегда, когда чат не открыт
 	if Store.notify_os() and OS.has_feature("android") and TnAndroidNotify.available():
 		if TnAndroidNotify.post(peer, title, body):
 			if hidden and OS.has_feature("mobile"):
 				Input.vibrate_handheld(220)
-			DisplayServer.window_request_attention()
+			if hidden:
+				DisplayServer.window_request_attention()
 			return
 	if Store.notify_os() and hidden and OS.has_feature("android") and TnAndroidNotify.post(peer, title, body):
 		return

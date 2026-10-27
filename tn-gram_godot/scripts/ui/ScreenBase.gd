@@ -316,14 +316,17 @@ func settings_row(title: String, content: Control) -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", UiStyle.box(p["panel"], 18, p["line"], 1, 16))
 	var row := hbox(14)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if title != "":
-		row.add_child(label(title, 15))
-		row.add_child(spacer())
+		var t := label(title, 15)
+		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(t)
 	else:
-		row.add_child(spacer())
+		var t2 := spacer()
+		t2.custom_minimum_size.x = 0
+		row.add_child(t2)
 	content.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	content.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	content.size_flags_horizontal = Control.SIZE_SHRINK_END
 	row.add_child(content)
-	row.add_child(spacer())
 	panel.add_child(row)
 	return panel
