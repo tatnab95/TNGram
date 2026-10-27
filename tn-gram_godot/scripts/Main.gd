@@ -37,7 +37,10 @@ func _ready() -> void:
 	Loc.lang = Store.lang()
 	fit_mobile_screen()
 	apply_theme()
-	apply_aa()
+	if OS.has_feature("android"):
+		get_viewport().msaa_2d = Viewport.MSAA_DISABLED
+	else:
+		apply_aa()
 	build_background()
 	Net.on_message = _on_net_message
 	# В отладочной сборке пишем всю сеть в журнал — видно в logcat (телефон)
@@ -56,7 +59,8 @@ func _ready() -> void:
 	show_screen("chats" if Store.current_nick != "" else "login", null)
 	check_update()
 	# На телефоне один раз просим разрешение на уведомления (Android 13+).
-	TnAndroidNotify.ensure_permission()
+	if OS.has_feature("android"):
+		TnAndroidNotify.ensure_permission()
 
 ## Когда окно снова в фокусе — убираем уведомление открытого чата из шторки
 ## (его уже прочитали). На компьютере метод ничего не делает.
@@ -147,6 +151,9 @@ func apply_theme() -> void:
 ## В простом графическом режиме (OpenGL) MSAA не поддерживается — тогда значение
 ## не выставляем вовсе, чтобы движок не ругался, и об этом сказано в настройках.
 func apply_aa() -> void:
+	if OS.has_feature("android"):
+		get_viewport().msaa_2d = Viewport.MSAA_DISABLED
+		return
 	if not UiStyle.shapes_aa_supported():
 		return
 	var modes := [Viewport.MSAA_DISABLED, Viewport.MSAA_2X, Viewport.MSAA_4X, Viewport.MSAA_8X]
@@ -155,7 +162,10 @@ func apply_aa() -> void:
 ## Полная перерисовка: после смены языка, темы или сглаживания
 func rebuild() -> void:
 	apply_theme()
-	apply_aa()
+	if OS.has_feature("android"):
+		get_viewport().msaa_2d = Viewport.MSAA_DISABLED
+	else:
+		apply_aa()
 	build_background()
 	show_screen(current_id, current_arg)
 
@@ -358,6 +368,9 @@ func build_background() -> void:
 	base.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	background.add_child(base)
 
+	if OS.has_feature("android"):
+		return
+
 	add_blob(Vector2(0.08, 0.02), 820, p["a1"], 0.30)
 	add_blob(Vector2(0.96, 0.14), 720, p["a2"], 0.26)
 	add_blob(Vector2(0.50, 1.02), 940, p["a1"].lerp(p["a2"], 0.5), 0.16)
@@ -380,6 +393,8 @@ func add_blob(anchor: Vector2, size: float, color: Color, strength: float) -> vo
 	blob.offset_bottom = size * 0.5
 	background.add_child(blob)
 	# Фон мягко дышит: пятно медленно покачивается вверх-вниз
+	if OS.has_feature("android"):
+		return
 	Anim.breathe(blob, 14.0, 7.0 + randf() * 4.0)
 
 ## ---------------------------------------------------------------- звук

@@ -614,7 +614,9 @@ func _on_http_completed(result: int, code: int, headers: PackedStringArray, body
 			# Облако не ответило — вход продолжится по устройству (запасной путь)
 			callback.call(false, "net_error", {})
 		return
-	var text := body.get_string_from_utf8()
+	var text := ""
+	if body != null and body.size() > 0:
+		text = body.get_string_from_utf8()
 	if debug:
 		_note("ответ " + str(code) + " " + tag + ": " + text.substr(0, 160))
 	if code >= 400:
