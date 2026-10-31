@@ -86,6 +86,18 @@ func build() -> void:
 	# --- аккаунт ---
 	list.add_child(settings_row(Loc.t("settings_account"), label(Store.current_nick, 15)))
 
+	# --- экспорт/импорт переписок ---
+	var backup := PanelContainer.new()
+	backup.add_theme_stylebox_override("panel", UiStyle.box(pal()["panel"], 18, pal()["line"], 1, 16))
+	var bbox := vbox(10)
+	bbox.add_child(label(Loc.t("chats_title"), 15))
+	var brow := hbox(10)
+	brow.add_child(accent_button(Loc.t("export_chats"), func() -> void: _export_chats()))
+	brow.add_child(ghost_button(Loc.t("import_chats"), func() -> void: _import_chats()))
+	bbox.add_child(brow)
+	backup.add_child(bbox)
+	list.add_child(backup)
+
 	# --- удаление аккаунта ---
 	var danger := ghost_button(Loc.t("settings_delete_account"), func() -> void: _confirm_delete_account())
 	danger.add_theme_color_override("font_color", Color("#ff8f8f"))
@@ -411,3 +423,90 @@ func _confirm_delete_account() -> void:
 		navigate.emit("login", null))
 	dialog.canceled.connect(dialog.queue_free)
 	dialog.popup_centered()
+
+func _export_chats() -> void:
+	var data := {
+		"version": 2,
+		"exported_at": int(Time.get_unix_time_from_system()),
+		"owner": Store.current_nick,
+		"chats": {},
+		"groups": {},
+		"unread": {}
+	}
+	if Store.chats.has(Store.current_nick):
+		data["chats"] = Store.chats[Store.current_nick].duplicate(true)
+	if Store.groups.has(Store.current_nick):
+		data["groups"] = Store.groups[Store.current_nick].duplicate(true)
+	if Store.unread.has(Store.current_nick):
+		data["unread"] = Store.unread[Store.current_nick].duplicate(true)
+	var json_str := JSON.stringify(data, "\t")
+	var dir := OS.get_user_data_dir()
+	var path_out := dir + "/TNGram_chats_export_" + str(int(Time.get_unix_time_from_system())) + ".json"
+	var file := FileAccess.open(path_out, FileAccess.WRITE)
+	if file == null:
+		_show_toast("export_failed")
+		return
+	file.store_string(json_str)
+	file.close()
+	_show_toast("export_done")
+
+func _import_chats() -> void:
+	var dir := OS.get_user_data_dir()
+	var dialog := FileDialog.new()
+	dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	dialog.access = FileDialog.ACCESS_FILESYSTEM
+	dialog.current_dir = dir
+	dialog.filters = PackedStringArray(["*.json"])
+	add_child(dialog)
+	dialog.file_selected.connect(func(selected: String) -> void:
+		_do_import(selected)
+		dialog.queue_free())
+	dialog.canceled.connect(dialog.queue_free)
+	dialog.popup_centered(Vector2i(640, 420))
+
+func _do_import(path_in: String) -> void:
+	var file := FileAccess.open(path_in, FileAccess.READ)
+	if file == null:
+		_show_toast("import_failed")
+		return
+	var json_str := file.get_as_text()
+	file.close()
+	var parsed = JSON.parse_string(json_str)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		_show_toast("import_failed")
+		return
+	var data: Dictionary = parsed
+	var owner := Store.current_nick
+	if not Store.chats.has(owner):
+		Store.chats[owner] = {}
+	if not Store.groups.has(owner):
+		Store.groups[owner] = {}
+	if not Store.unread.has(owner):
+		Store.unread[owner] = {}
+	var imported_chats: Dictionary = data.get("chats", {}) if typeof(data.get("chats")) == TYPE_DICTIONARY else {}
+	for peer in imported_chats.keys():
+		var list = imported_chats[peer]
+		if typeof(list) != TYPE_ARRAY:
+			continue
+		if not Store.chats[owner].has(peer):
+			Store.chats[owner][peer] = []
+		var existing: Array = Store.chats[owner][peer]
+		for msg in list:
+			if typeof(msg) != TYPE_DICTIONARY:
+				continue
+			existing.append(msg)
+		Store.chats[owner][peer] = existing
+	var imported_groups: Dictionary = data.get("groups", {}) if typeof(data.get("groups")) == TYPE_DICTIONARY else {}
+	for g in imported_groups.keys():
+		Store.groups[owner][g] = imported_groups[g]
+	var imported_unread: Dictionary = data.get("unread", {}) if typeof(data.get("unread")) == TYPE_DICTIONARY else {}
+	for pkey in imported_unread.keys():
+		Store.unread[owner][pkey] = imported_unread[pkey]
+	Store.save_data()
+	Store.emit_signal("data_changed")
+	_show_toast("import_done")
+
+func _show_toast(key: String) -> void:
+	var app_node := app()
+	if app_node != null and app_node.has_method("show_toast"):
+		app_node.show_toast(key, Loc.t(key), "")

@@ -233,15 +233,21 @@ func contact_button(nick: String, subtitle: String, right_text: String, on_press
 	var p := pal()
 	var button := Button.new()
 	button.custom_minimum_size = Vector2(0, 74)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.clip_contents = true
 	button.focus_mode = Control.FOCUS_NONE
+	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	button.add_theme_stylebox_override("normal", UiStyle.box(p["panel"], 20, p["line"], 1, 0))
 	button.add_theme_stylebox_override("hover", UiStyle.box(p["panel_strong"], 20, p["a2"] * Color(1, 1, 1, 0.5), 1, 0))
 	button.add_theme_stylebox_override("pressed", UiStyle.box(p["panel_strong"], 20, p["a2"], 1, 0))
-	button.add_theme_stylebox_override("focus", UiStyle.box(Color(0, 0, 0, 0), 20, Color(0, 0, 0, 0), 0, 0))
+	button.add_theme_stylebox_override("focus", UiStyle.box(p["panel"], 20, p["line"], 1, 0))
+	button.add_theme_stylebox_override("disabled", UiStyle.box(p["panel"], 20, p["line"], 1, 0))
 	button.pressed.connect(on_press)
 
 	var row := hbox(14)
 	row.set_anchors_preset(Control.PRESET_FULL_RECT)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	row.offset_left = 16
 	row.offset_top = 12
 	row.offset_right = -18

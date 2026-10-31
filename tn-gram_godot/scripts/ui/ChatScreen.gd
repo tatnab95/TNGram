@@ -91,11 +91,11 @@ func _paint_status() -> void:
 func _note_text() -> String:
 	return Loc.t("net_note_online") if Net.is_online() else Loc.t("net_note_offline")
 
-## Отклик сервера: «Пинг 84 мс», а пока не измерено — «Пинг…»
+## Отклик сервера: «Пинг 84 мс», а пока не измерено — «Пинг: —»
 func _ping_text() -> String:
 	if Net.ping_ms < 0:
-		return Loc.t("ping_wait")
-	return Loc.tf("ping_line", [str(Net.ping_ms)])
+		return "Пинг: —"
+	return "Пинг: " + str(Net.ping_ms) + " мс"
 
 ## Полная перерисовка экрана (например, после смены темы). Не теряем то, что
 ## уже напечатано, и возвращаем курсор туда, где он был.
@@ -155,8 +155,13 @@ func build() -> void:
 	if not is_ai:
 		ping_label = hint(_ping_text(), 11)
 		ping_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		ping_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		ping_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+		ping_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		ping_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		ping_label.custom_minimum_size.x = 0
 		top.add_child(ping_label)
-	top.add_child(ghost_button(Loc.t("chat_delete"), func() -> void:
+	top.add_child(ghost_button("⋮", func() -> void:
 		_confirm_delete()))
 	var head := PanelContainer.new()
 	head.add_theme_stylebox_override("panel", UiStyle.box(p["panel"], 20, p["line"], 1, 8))
@@ -167,7 +172,7 @@ func build() -> void:
 	# --- сообщения ---
 	messages_box = vbox(8)
 	scroller = scroll()
-	scroller.get_v_scroll_bar().value_changed.connect(_sync_down_button)
+	scroller.get_v_scroll_bar().value_changed.connect(func(_v: float) -> void: _sync_down_button())
 	var holder := MarginContainer.new()
 	holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	holder.add_theme_constant_override("margin_right", 6)

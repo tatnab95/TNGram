@@ -123,23 +123,20 @@ static func bubble_box(mine: bool, accent_a: Color, accent_b: Color, panel: Colo
 	sb.content_margin_top = 8.0
 	sb.content_margin_bottom = 6.0
 	if mine:
-		sb.set_corner_radius_bottom_right(6)
-		sb.bg_color = accent_a
-		var gradient := Gradient.new()
-		gradient.set_color(0, accent_a)
-		gradient.set_color(1, accent_b)
-		var texture := GradientTexture2D.new()
-		texture.gradient = gradient
-		texture.width = 256
-		texture.height = 64
-		texture.fill = GradientTexture2D.FILL_LINEAR
-		texture.fill_from = Vector2(0, 0)
-		texture.fill_to = Vector2(1, 1)
-		sb.gradient = texture
-		sb.gradient_fill_from = Vector2(0, 0)
-		sb.gradient_fill_to = Vector2(1, 1)
+		sb.corner_radius_bottom_right = 6
+		sb.corner_radius_top_left = 18
+		sb.corner_radius_top_right = 18
+		sb.corner_radius_bottom_left = 18
+		sb.bg_color = accent_b
+		sb.border_width_left = 0
+		sb.border_width_right = 0
+		sb.border_width_top = 0
+		sb.border_width_bottom = 0
 	else:
-		sb.set_corner_radius_bottom_left(6)
+		sb.corner_radius_bottom_left = 6
+		sb.corner_radius_top_left = 18
+		sb.corner_radius_top_right = 18
+		sb.corner_radius_bottom_right = 18
 		sb.bg_color = panel
 		sb.set_border_width_all(1)
 		sb.border_color = line

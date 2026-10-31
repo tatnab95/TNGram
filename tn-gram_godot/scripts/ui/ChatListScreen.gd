@@ -64,10 +64,10 @@ func build() -> void:
 
 	# --- верхняя строка: кто вошёл и настройки ---
 	var top := hbox(12)
-	top.add_child(avatar(Store.current_nick, 40, true))
-	var who := vbox(0)
+	top.add_child(avatar(Store.current_nick, 44, true))
+	var who := vbox(1)
 	who.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	who.add_child(label(Store.current_nick, 15))
+	who.add_child(label(Store.current_nick, 16))
 	who.add_child(hint(Loc.t("chats_you"), 12))
 	top.add_child(who)
 	top.add_child(spacer())
