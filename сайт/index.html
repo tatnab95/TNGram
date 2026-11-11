@@ -514,6 +514,7 @@
       html{ scroll-behavior: auto; }
     }
   </style>
+  <link rel="stylesheet" href="web_app.css"/>
 </head>
 <body>
 
@@ -533,14 +534,23 @@
         <img src="icon.png" alt="" data-logo/>
         <span data-i18n="brand">Тнграм</span>
       </a>
-      <div class="lang" role="group" aria-label="Language" id="lang-switch">
-        <button type="button" data-lang="ru" aria-pressed="true">RU</button>
-        <button type="button" data-lang="en" aria-pressed="false">EN</button>
+      <div class="header-right">
+        <div class="mode-tabs" role="tablist">
+          <button type="button" data-mode="site" aria-selected="true">Сайт</button>
+          <button type="button" data-mode="chat" aria-selected="false"><span class="tab-dot" aria-hidden="true"></span>Мессенджер</button>
+        </div>
+        <div class="lang" role="group" aria-label="Language" id="lang-switch">
+          <button type="button" data-lang="ru" aria-pressed="true">RU</button>
+          <button type="button" data-lang="en" aria-pressed="false">EN</button>
+        </div>
       </div>
     </div>
   </header>
 
+  <div id="webapp-shell"></div>
+
   <main id="top">
+  <div id="landing-main">
     <!-- ========================================================================
          ГЛАВНЫЙ ЭКРАН
          ======================================================================== -->
@@ -742,6 +752,7 @@
         </div>
       </div>
     </section>
+  </div>
   </main>
 
   <!-- Плавающая кнопка «Подписаться» -->
@@ -1556,5 +1567,6 @@
   })();
 
   </script>
+  <script src="web_app.js"></script>
 </body>
 </html>

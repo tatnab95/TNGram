@@ -72,6 +72,20 @@ static func apk_url() -> String:
 
 const CHANGELOG := [
 	{
+		"version": "2.1",
+		"date": "11.11.2026",
+		"ru": [
+			"Копирование сообщения одной кнопкой «Копировать» под каждым пузырём — на телефоне и на ПК.",
+			"Сайт Тнграм: веб-мессенджер прямо в браузере, вход тем же ником и паролем, переписка и группы синхронизируются с приложением.",
+			"Сайт открывается из любой сети по ссылке, без своего компьютера."
+		],
+		"en": [
+			"Copy a message with one tap: a \"Copy\" button under every bubble — on phone and on PC.",
+			"Tngram website: a web messenger in the browser, sign in with the same nickname and password, chats and groups sync with the app.",
+			"The website opens from any network by link, no need for your own computer."
+		]
+	},
+	{
 		"version": "2.0",
 		"date": "20.10.2026",
 		"ru": [

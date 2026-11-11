@@ -326,10 +326,25 @@ func message_row(message: Dictionary) -> Control:
 
 	var time_label := label(Store.format_time(int(message.get("ts", 0))), 10,
 		Color(1, 1, 1, 0.72) if mine else p["muted"])
-	time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	time_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	time_label.custom_minimum_size.x = 0
-	body.add_child(time_label)
+	var copy_button := Button.new()
+	copy_button.text = Loc.t("chat_copy")
+	copy_button.flat = true
+	copy_button.focus_mode = Control.FOCUS_NONE
+	copy_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	copy_button.add_theme_font_size_override("font_size", 11)
+	copy_button.add_theme_color_override("font_color", Color(1, 1, 1, 0.8) if mine else p["a2"])
+	copy_button.add_theme_color_override("font_hover_color", Color("#ffffff") if mine else p["text"])
+	copy_button.add_theme_stylebox_override("normal", UiStyle.box(Color(0, 0, 0, 0), 8, Color(0, 0, 0, 0), 0, 2))
+	copy_button.add_theme_stylebox_override("hover", UiStyle.box(Color(1, 1, 1, 0.08), 8, Color(0, 0, 0, 0), 0, 2))
+	copy_button.add_theme_stylebox_override("pressed", UiStyle.box(Color(1, 1, 1, 0.14), 8, Color(0, 0, 0, 0), 0, 2))
+	copy_button.pressed.connect(func() -> void: _copy_message(text))
+	var footer := hbox(10)
+	footer.add_child(time_label)
+	footer.add_child(copy_button)
+	body.add_child(footer)
 
 	bubble.add_child(body)
 	row.add_child(bubble)
@@ -339,6 +354,12 @@ func message_row(message: Dictionary) -> Control:
 		s.custom_minimum_size.x = 0
 		row.add_child(s)
 	return row
+
+func _copy_message(text: String) -> void:
+	DisplayServer.clipboard_set(text)
+	var app_node := app()
+	if app_node != null and app_node.has_method("show_toast"):
+		app_node.show_toast(Loc.t("app_name"), Loc.t("chat_copied"), "")
 
 func scroll_to_bottom() -> void:
 	if scroller == null or not is_instance_valid(scroller):
