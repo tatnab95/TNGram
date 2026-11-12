@@ -40,7 +40,7 @@ const GROUP_MAX_MEMBERS := 32
 const GROUP_TITLE_MAX := 32
 
 ## ---- Версия и обновления ----
-const APP_VERSION := "2.2"
+const APP_VERSION := "2.3"
 
 ## ---- Слабый ИИ: живёт только на устройстве, работает без интернета ----
 ## Особый адрес чата: не ник и не группа. В список людей он не попадает
@@ -71,6 +71,20 @@ static func apk_url() -> String:
 	return SITE_URL + APK_FILE
 
 const CHANGELOG := [
+	{
+		"version": "2.3",
+		"date": "12.11.2026",
+		"ru": [
+			"Исправлена полоса «Доступна новая версия»: текст больше не сжимается по буквам.",
+			"Сайт: скачивание Windows, Linux и Android прямо с главной страницы.",
+			"Порядок в проекте: убраны лишние файлы сборки."
+		],
+		"en": [
+			"Fixed the \"new version\" banner: the text no longer breaks into single letters.",
+			"Website: download Windows, Linux and Android straight from the main page.",
+			"Project cleanup: removed leftover build files."
+		]
+	},
 	{
 		"version": "2.2",
 		"date": "12.11.2026",

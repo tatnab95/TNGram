@@ -144,11 +144,12 @@ func update_banner(version: String) -> PanelContainer:
 		UiStyle.box(pal()["a1"].lerp(pal()["a2"], 0.4), 16, pal()["a2"], 1, 12))
 	var row := hbox(12)
 	var text := label(Loc.tf("update_available", [version]), 14, Color("#04121b"), true)
+	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	text.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(text)
-	row.add_child(spacer())
 	var get_button := ghost_button(Loc.t("update_get"), func() -> void:
 		app().open_update())
+	get_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	get_button.add_theme_color_override("font_color", Color("#04121b"))
 	row.add_child(get_button)
 	panel.add_child(row)
