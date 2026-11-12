@@ -40,7 +40,7 @@ const GROUP_MAX_MEMBERS := 32
 const GROUP_TITLE_MAX := 32
 
 ## ---- Версия и обновления ----
-const APP_VERSION := "2.1"
+const APP_VERSION := "2.2"
 
 ## ---- Слабый ИИ: живёт только на устройстве, работает без интернета ----
 ## Особый адрес чата: не ник и не группа. В список людей он не попадает
@@ -71,6 +71,18 @@ static func apk_url() -> String:
 	return SITE_URL + APK_FILE
 
 const CHANGELOG := [
+	{
+		"version": "2.2",
+		"date": "12.11.2026",
+		"ru": [
+			"Обновления проверяются во время работы: раз в полчаса, без перезапуска.",
+			"Кнопка «Обновить» на компьютере открывает страницу последнего релиза с файлами."
+		],
+		"en": [
+			"Updates are checked while the app runs: every half hour, no restart needed.",
+			"The \"Update\" button on a computer opens the latest release page with the files."
+		]
+	},
 	{
 		"version": "2.1",
 		"date": "11.11.2026",

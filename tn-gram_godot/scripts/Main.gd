@@ -56,6 +56,12 @@ func _ready() -> void:
 	ping_timer.timeout.connect(_ping_tick)
 	ping_timer.autostart = true
 	add_child(ping_timer)
+	# Новую версию проверяем и во время работы: раз в полчаса
+	var update_timer := Timer.new()
+	update_timer.wait_time = 1800.0
+	update_timer.timeout.connect(func() -> void: check_update(true))
+	update_timer.autostart = true
+	add_child(update_timer)
 	show_screen("chats" if Store.current_nick != "" else "login", null)
 	check_update()
 	# На телефоне один раз просим разрешение на уведомления (Android 13+).
