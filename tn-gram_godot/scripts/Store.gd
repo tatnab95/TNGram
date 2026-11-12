@@ -40,6 +40,16 @@ func _ready() -> void:
 	if accounts.is_empty():
 		_seed_default_accounts()
 		save_data()
+	_restore_session()
+
+## Вспомнить, кто вошёл в прошлый раз: вход не нужно вводить заново при каждом запуске
+func _restore_session() -> void:
+	var nick := String(settings.get("last_nick", ""))
+	if nick == "" or current_nick != "":
+		return
+	var acc := find_account(nick)
+	if not acc.is_empty():
+		current_nick = String(acc["nick"])
 
 ## Создаём аккаунты «админ» и «админ2» при самом первом запуске
 func _seed_default_accounts() -> void:
@@ -113,6 +123,8 @@ func logout() -> void:
 	current_nick = ""
 	nick_conflict = false
 	peer_seen.clear()
+	settings.erase("last_nick")
+	save_data()
 	emit_signal("data_changed")
 
 func current_account() -> Dictionary:
