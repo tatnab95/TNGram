@@ -72,4 +72,4 @@ Android:  godot --headless --path tn-gram_godot --export-debug "Android" build/T
 
 ## Лицензия
 
-Лицензия не выбрана, поэтому все права принадлежат автору. Если хочешь открыть код для других, добавь файл `LICENSE` (например, MIT) через **Add file → Create new file** в GitHub.
+Код распространяется по лицензии MIT, см. файл [LICENSE](LICENSE).
