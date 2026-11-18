@@ -40,7 +40,7 @@ const GROUP_MAX_MEMBERS := 32
 const GROUP_TITLE_MAX := 32
 
 ## ---- Версия и обновления ----
-const APP_VERSION := "2.3"
+const APP_VERSION := "2.4"
 
 ## ---- Слабый ИИ: живёт только на устройстве, работает без интернета ----
 ## Особый адрес чата: не ник и не группа. В список людей он не попадает
@@ -71,6 +71,24 @@ static func apk_url() -> String:
 	return SITE_URL + APK_FILE
 
 const CHANGELOG := [
+	{
+		"version": "2.4",
+		"date": "19.11.2026",
+		"ru": [
+			"Вход как на сайте: карточка по центру, крупный заголовок, поле пароля в рамке.",
+			"Быстрый вход: аккаунты без пароля открываются одной кнопкой.",
+			"Пинг в переписке — в аккуратной плашке.",
+			"Сообщения подписывает облако: отправителя больше нельзя подделать.",
+			"Облако убирает непрочитанное старше 90 дней и не даёт заваливать очередь."
+		],
+		"en": [
+			"Sign-in looks like the website: a centred card, a large title and a framed password field.",
+			"Quick sign-in: passwordless accounts open with one tap.",
+			"Ping in a chat is shown in a neat pill.",
+			"The cloud signs the sender, so the author can no longer be forged.",
+			"The cloud clears unread messages older than 90 days and rate-limits senders."
+		]
+	},
 	{
 		"version": "2.3",
 		"date": "12.11.2026",
