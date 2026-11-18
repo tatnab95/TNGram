@@ -25,6 +25,7 @@ var current_arg: Variant = null
 var screen: Control = null
 var background: Control = null
 var _nick_checked := ""  ## ник, который уже сверили с облаком (чтобы не дёргать зря)
+var _auth_fixing := false  ## уже обновляем пропуск — второй раз не просим
 var _update_checked := false  ## версию на сайте проверяем один раз за запуск
 var _update_answer: Callable = Callable()  ## кому сказать, чем кончилась проверка версии
 var _presence_beat := 2.0  ## через сколько отметить себя в сети
@@ -43,6 +44,7 @@ func _ready() -> void:
 		apply_aa()
 	build_background()
 	Net.on_message = _on_net_message
+	Net.auth_expired.connect(_on_auth_expired)
 	# В отладочной сборке пишем всю сеть в журнал — видно в logcat (телефон)
 	# и в консоли (компьютер)
 	if OS.is_debug_build():
@@ -327,6 +329,28 @@ func refresh_session() -> void:
 			if ok and is_inside_tree() and Store.current_nick == nick:
 				Store.set_session(nick, session)
 				apply_session())
+
+## Пропуск истёк прямо во время работы (облако ответило 401): меняем его
+## по ключу обновления и переподключаемся, чтобы поток сообщений снова шёл
+## от имени человека, а не по общему ключу.
+func _on_auth_expired() -> void:
+	if _auth_fixing or Store.current_nick == "" or not P.is_cloud(Store.relay_host()):
+		return
+	var nick := Store.current_nick
+	var refresh := Store.refresh_value(nick)
+	if refresh == "":
+		return
+	_auth_fixing = true
+	Store.expire_session(nick)
+	Net.cloud_auth_refresh(Store.relay_host(), Store.relay_key(), refresh,
+		func(ok: bool, _reason: String, session: Dictionary) -> void:
+			_auth_fixing = false
+			if not ok or not is_inside_tree() or Store.current_nick != nick:
+				return
+			Store.set_session(nick, session)
+			apply_session()
+			Net.stop()
+			Net.connect_to(Store.relay_host(), Store.relay_port(), nick, Store.relay_key()))
 
 ## Сверить свой ник с облаком: занят ли он ещё кем-то. Заодно занять свой ник,
 ## чтобы больше никто не мог назваться так же. Делается один раз на вход.

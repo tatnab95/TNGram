@@ -14,6 +14,8 @@ class_name TnNet
 
 signal changed                  ## состояние или статус изменились
 signal notice(text: String)     ## отладочные строки (включаются флагом debug)
+## Облако не приняло пропуск (истёк или отозван): нужен новый, см. Main.
+signal auth_expired
 
 const P := preload("res://scripts/net/Protocol.gd")
 
@@ -639,6 +641,11 @@ func _on_http_completed(result: int, code: int, headers: PackedStringArray, body
 		_note("ответ " + str(code) + " " + tag + ": " + text.substr(0, 160))
 	if code >= 400:
 		_note("облако ответило %d: %s" % [code, text])
+		# Пропуск больше не годится (живёт час): отпускаем его и просим новый.
+		# До ответа работаем по публичному ключу, как обычные версии.
+		if code == 401 and auth_token != "":
+			auth_token = ""
+			emit_signal("auth_expired")
 		# 409 — ник уже занят другим человеком
 		if tag == "nick_claim" and callback.is_valid():
 			callback.call(true, code == 409)
