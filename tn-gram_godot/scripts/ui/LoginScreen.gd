@@ -18,7 +18,7 @@ func rebuild() -> void:
 	build()
 
 func build() -> void:
-	# Раскладка: содержимое по центру окна, шириной 440.
+	# Как на сайте: по центру окна «карточка» шириной 440.
 	# Прокрутка нужна на случай маленького окна — тогда ничего не обрежется.
 	var scroller := scroll()
 	scroller.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -41,7 +41,7 @@ func build() -> void:
 	outer.add_child(row)
 	row.add_child(spacer())
 
-	var column := vbox(11)
+	var column := vbox(10)
 	column.custom_minimum_size = Vector2(440, 0)
 	row.add_child(column)
 	row.add_child(spacer())
@@ -51,34 +51,66 @@ func build() -> void:
 	# Язык (можно переключить ещё до входа)
 	column.add_child(lang_row())
 
-	# Иконка и название
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel",
+		UiStyle.box(pal()["panel"], 24, pal()["line"], 1, 26))
+	column.add_child(card)
+
+	var inner := vbox(12)
+	card.add_child(inner)
+
+	# Иконка и название — как в вебе
 	var logo := TextureRect.new()
 	logo.texture = load("res://icon.png")
-	logo.custom_minimum_size = Vector2(68, 68)
+	logo.custom_minimum_size = Vector2(66, 66)
 	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	logo.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	column.add_child(logo)
+	inner.add_child(logo)
 
-	var name_label := heading(Loc.t("app_name"), 30)
+	var name_label := heading(Loc.t("login_title_web"), 26)
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	column.add_child(name_label)
+	inner.add_child(name_label)
 
-	var tagline := hint(Loc.t("app_tagline"), 14)
-	tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	column.add_child(tagline)
+	var sub_label := hint(Loc.t("login_subtitle_web"), 13)
+	sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	inner.add_child(sub_label)
 
-	column.add_child(gap(6))
+	inner.add_child(gap(2))
 
 	if password_for == "":
-		build_account_list(column)
+		build_account_list(inner)
 	else:
-		build_password_step(column)
+		build_password_step(inner)
 
 ## ------------------------------------------------------------- список аккаунтов
 
+## Аккаунты без пароля на этом устройстве — для быстрого входа одним касанием.
+func quick_accounts() -> Array:
+	var out: Array = []
+	for acc in Store.accounts:
+		var nick := String(acc.get("nick", ""))
+		if nick == "" or Store.has_password(nick):
+			continue
+		out.append(nick)
+		if out.size() >= 2:
+			break
+	return out
+
 func build_account_list(column: VBoxContainer) -> void:
-	column.add_child(title_block(Loc.t("login_title"), Loc.t("login_subtitle")))
+	# Быстрый вход: два аккаунта без пароля — как кнопки-таблетки.
+	var quick := quick_accounts()
+	if not quick.is_empty():
+		var cap := hint(Loc.t("login_quick"), 12)
+		cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		column.add_child(cap)
+		var quick_row := hbox(8)
+		quick_row.alignment = BoxContainer.ALIGNMENT_CENTER
+		for nick in quick:
+			var chip := ghost_button(nick, _on_pick_account.bind(nick))
+			chip.custom_minimum_size = Vector2(124, 42)
+			quick_row.add_child(chip)
+		column.add_child(quick_row)
 
 	if Store.accounts.is_empty():
 		column.add_child(hint(Loc.t("login_no_accounts")))
@@ -90,10 +122,9 @@ func build_account_list(column: VBoxContainer) -> void:
 			list.add_child(contact_button(nick, subtitle, "", _on_pick_account.bind(nick)))
 		column.add_child(list)
 
-	column.add_child(gap(6))
+	column.add_child(gap(4))
 	var create := accent_button(Loc.t("login_create"), func() -> void:
 		navigate.emit("new", null))
-	create.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	column.add_child(create)
 
 ## ------------------------------------------------------------- шаг с паролем
@@ -113,6 +144,10 @@ func build_password_step(column: VBoxContainer) -> void:
 	field.secret = true
 	field.placeholder_text = Loc.t("login_password")
 	field.custom_minimum_size = Vector2(0, 46)
+	field.add_theme_stylebox_override("normal",
+		UiStyle.box(pal()["panel_strong"], 14, pal()["line"], 1, 14))
+	field.add_theme_stylebox_override("focus",
+		UiStyle.box(pal()["panel_strong"], 14, pal()["a2"], 1, 14))
 	column.add_child(field)
 
 	var enter := accent_button(Loc.t("login_enter"), func() -> void: _try_login(password_for, field.text))
