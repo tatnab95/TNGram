@@ -299,10 +299,10 @@ func maybe_connect() -> void:
 		return
 	if OS.is_debug_build():
 		print("[сеть] подключаемся: ", Store.relay_host(), " от лица ", Store.current_nick)
-	check_nick()
-	check_update()
 	refresh_session()
 	apply_session()
+	check_nick()
+	check_update()
 	if Net.is_online() and Net.nick == Store.current_nick:
 		return
 	Net.connect_to(Store.relay_host(), Store.relay_port(), Store.current_nick, Store.relay_key())
@@ -342,6 +342,15 @@ func check_nick() -> void:
 	_nick_checked = Store.current_nick
 	var nick := Store.current_nick
 	var key := Store.relay_key()
+	# Вошедшему ник закрепляет облако: оно знает, чья это учётная запись,
+	# и пароль по сети больше не сверяется.
+	if Net.auth_token != "":
+		Net.cloud_claim_with_token(host, key, nick, func(ok: bool, claimed: String) -> void:
+			if not ok or not is_inside_tree():
+				return
+			if claimed.strip_edges() == "":
+				Store.flag_nick_conflict())
+		return
 	var my_hash := String(Store.current_account().get("pass_hash", ""))
 	Net.cloud_lookup_nick(host, key, nick, func(ok: bool, taken: bool, other_hash: String) -> void:
 		if not ok or not is_inside_tree():

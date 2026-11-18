@@ -93,6 +93,8 @@ const STRINGS := {
 		"settings_soon_server": "Свой сервер работает внутри одной сети. Для связи из любой точки впиши адрес облака и ключ проекта.",
 		"settings_version": "версия %s",
 		"settings_news": "Что нового",
+		"export_chats": "Сохранить чаты",
+		"import_chats": "Загрузить чаты",
 
 		# --- сглаживание ---
 		"settings_graphics": "Сглаживание",
@@ -305,6 +307,8 @@ const STRINGS := {
 		"settings_soon_server": "Your own server works inside one network. For delivery anywhere, enter the cloud address and the project key.",
 		"settings_version": "version %s",
 		"settings_news": "What's new",
+		"export_chats": "Save chats",
+		"import_chats": "Load chats",
 
 		# --- сглаживание ---
 		"settings_graphics": "Smoothing",

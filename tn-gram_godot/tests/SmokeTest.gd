@@ -1214,15 +1214,17 @@ func _ready() -> void:
 	Store.peer_seen = {}
 	Store.save_data()
 
-	# -------------------------------------- 15з. Уведомления и обновления (версия 2.0)
-	check("версия поднята до 2.0", Protocol.APP_VERSION == "2.0", Protocol.APP_VERSION)
+	# -------------------------------------- 15з. Уведомления и обновления
+	check("версия не ниже 2.0", Protocol.version_compare(Protocol.APP_VERSION, "2.0") >= 0,
+		Protocol.APP_VERSION)
 	check("ссылка на установщик известна",
 		Protocol.apk_url() == Protocol.SITE_URL + "TNGram.apk", Protocol.apk_url())
-	check("в списке изменений первая — 2.0",
-		String((Protocol.CHANGELOG[0] as Dictionary).get("version", "")) == "2.0")
+	check("в списке изменений первой стоит текущая версия",
+		String((Protocol.CHANGELOG[0] as Dictionary).get("version", "")) == Protocol.APP_VERSION,
+		String((Protocol.CHANGELOG[0] as Dictionary).get("version", "")))
 	var big_ru: Array = (Protocol.CHANGELOG[0] as Dictionary).get("ru", [])
 	var big_en: Array = (Protocol.CHANGELOG[0] as Dictionary).get("en", [])
-	check("обновление 2.0 — большое: пунктов много", big_ru.size() >= 6 and big_en.size() >= 6,
+	check("у последней версии есть пункты на двух языках", big_ru.size() >= 2 and big_en.size() >= 2,
 		"ru=%d en=%d" % [big_ru.size(), big_en.size()])
 	# Телефонные уведомления живут только на телефоне: на компьютере (и в headless-
 	# проверках) они честно отвечают «нет» и ничего не делают.

@@ -134,12 +134,20 @@ func send_message(to_nick: String, text: String) -> bool:
 	if state != State.ONLINE or to_nick.strip_edges() == "" or text.strip_edges() == "":
 		return false
 	if mode == Mode.CLOUD:
-		_queue_http("send", "POST", P.rest_url(_cloud_base, P.CLOUD_TABLE), {
-			"from_nick": nick,
-			"to_nick": to_nick.strip_edges(),
-			"body": text,
-			"client_ts": int(Time.get_unix_time_from_system())
-		})
+		if auth_token != "":
+			# Вошедшему отправителя подставляет облако: from_nick из запроса не берётся.
+			_queue_http("send_rpc", "POST", P.rest_url(_cloud_base, "rpc/tn_send"), {
+				"p_to": to_nick.strip_edges(),
+				"p_body": text,
+				"p_ts": int(Time.get_unix_time_from_system())
+			})
+		else:
+			_queue_http("send", "POST", P.rest_url(_cloud_base, P.CLOUD_TABLE), {
+				"from_nick": nick,
+				"to_nick": to_nick.strip_edges(),
+				"body": text,
+				"client_ts": int(Time.get_unix_time_from_system())
+			})
 		return true
 	_send_line({ "t": P.C_SEND, "to": to_nick, "text": text })
 	return true
@@ -207,6 +215,16 @@ func cloud_claim_nick(base_url: String, key: String, nick: String, pass_hash: St
 		"nick": nick.strip_edges(),
 		"pass_hash": pass_hash
 	}, ["Prefer: return=minimal"], { "key": key, "cb": answer })
+
+## Занять ник, будучи вошедшим: облако связывает ник с учётной записью.
+## answer(ok, ник): пустой ник — он уже закреплён за другим человеком.
+func cloud_claim_with_token(base_url: String, key: String, nick: String, answer: Callable) -> void:
+	var base := base_url.strip_edges().trim_suffix("/")
+	if base == "" or key.strip_edges() == "" or auth_token == "" or P.nick_key(nick) == "":
+		answer.call(false, "")
+		return
+	_queue_http("claim_rpc", "POST", P.rest_url(base, "rpc/tn_claim"),
+		{ "p_nick": nick.strip_edges() }, [], { "key": key, "cb": answer })
 
 ## Узнать у облака последнюю версию приложения. answer(ok, { "version", "notes", "url" }).
 ## Работает и без подключённого канала — обычным запросом к таблице.
@@ -420,7 +438,7 @@ func _process_cloud(delta: float) -> void:
 									"filter": "to_nick=eq." + nick
 								}]
 							},
-							"access_token": cloud_key
+							"access_token": auth_token if auth_token != "" else cloud_key
 						},
 						"ref": _next_ref()
 					})
@@ -552,11 +570,9 @@ func _cloud_headers(extra: Array = [], key: String = "", plain: bool = false) ->
 	else:
 		var token := key if key.strip_edges() != "" else cloud_key
 		headers.append("apikey: " + token)
-		# Облаку нужен именно публичный ключ проекта. Пропуск человека (JWT)
-		# тамошние правила доступа к таблице сообщений не пропускают — запросы
-		# возвращали пустой ответ, и сообщения «не доходили». Публичный ключ
-		# проверен на всех наших операциях: чтение, отправка и удаление.
-		headers.append("Authorization: Bearer " + token)
+		# Вошедшему прикладываем его пропуск: тогда облако само знает, кто отправитель,
+		# и правила доступа могут опираться на учётную запись, а не на ник из запроса.
+		headers.append("Authorization: Bearer " + (auth_token if auth_token != "" else token))
 		# charset обязателен: без него облако портило кириллицу в никах
 		headers.append("Content-Type: application/json; charset=utf-8")
 		headers.append("Accept: application/json")
@@ -598,6 +614,8 @@ func _on_http_completed(result: int, code: int, headers: PackedStringArray, body
 		_note("сетевая ошибка запроса: " + str(result))
 		if tag == "nick_claim" and callback.is_valid():
 			callback.call(false, false)
+		elif tag == "claim_rpc" and callback.is_valid():
+			callback.call(false, "")
 		elif tag == "nick_lookup" and callback.is_valid():
 			callback.call(false, false, "")
 		elif tag == "version" and callback.is_valid():
@@ -624,6 +642,12 @@ func _on_http_completed(result: int, code: int, headers: PackedStringArray, body
 		# 409 — ник уже занят другим человеком
 		if tag == "nick_claim" and callback.is_valid():
 			callback.call(true, code == 409)
+		elif tag == "claim_rpc" and callback.is_valid():
+			callback.call(false, "")
+		elif tag == "send_rpc":
+			# Сообщение не приняли: оно уже сохранено у отправителя, но до собеседника
+			# не дойдёт — молчать об этом нельзя.
+			_note("облако не приняло сообщение %d: %s" % [code, text.substr(0, 120)])
 		elif tag == "nick_lookup" and callback.is_valid():
 			callback.call(false, false, "")
 		elif tag == "version" and callback.is_valid():
@@ -661,6 +685,12 @@ func _on_http_completed(result: int, code: int, headers: PackedStringArray, body
 		"nick_claim":
 			if callback.is_valid():
 				callback.call(true, false)
+		"claim_rpc":
+			var claimed: Variant = JSON.parse_string(text)
+			if callback.is_valid():
+				callback.call(true, String(claimed) if typeof(claimed) == TYPE_STRING else "")
+		"send_rpc":
+			_note("сообщение принято облаком: " + text)
 		"presence_ping":
 			if callback.is_valid():
 				callback.call(true)
