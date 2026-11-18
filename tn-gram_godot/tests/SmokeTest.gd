@@ -5,6 +5,7 @@ extends Node
 
 const TnNetScript := preload("res://scripts/net/TnNet.gd")
 const Protocol := preload("res://scripts/net/Protocol.gd")
+const Crypt := preload("res://scripts/Crypt.gd")
 
 var failures := 0
 var passes := 0
@@ -1300,6 +1301,48 @@ func _ready() -> void:
 	Store.settings = { "lang": "ru", "theme": "dark", "last_nick": "" }
 	Store.save_data()
 	check("настройки сброшены", Store.lang() == "ru" and Store.theme() == "dark" and Store.current_nick == "")
+
+	# ---------------------------------------------------------- 20. Шифрование файла
+	var key := Crypt.random_bytes(32)
+	var secret := "привет, мир".to_utf8_buffer()
+	var sealed := Crypt.seal(key, secret)
+	check("файл помечен как зашифрованный", Crypt.looks_sealed(sealed))
+	check("открытый файл метки не имеет", not Crypt.looks_sealed(secret))
+	check("расшифровка возвращает исходное", Crypt.open(key, sealed) == secret,
+		str(Crypt.open(key, sealed).size()))
+	check("чужим ключом не открывается", Crypt.open(Crypt.random_bytes(32), sealed).is_empty())
+	var tampered := sealed.duplicate()
+	tampered[tampered.size() - 1] = tampered[tampered.size() - 1] ^ 1
+	check("подмена подписи не проходит", Crypt.open(key, tampered).is_empty())
+	check("обрезанный файл не открывается", Crypt.open(key, sealed.slice(0, sealed.size() - 10)).is_empty())
+	check("пустой файл не считается нашим", not Crypt.looks_sealed(PackedByteArray()))
+
+	# Файл на диске должен быть именно шифртекстом
+	var disk := FileAccess.open(Store.save_path, FileAccess.READ)
+	check("файл данных существует", disk != null)
+	if disk != null:
+		var disk_blob := disk.get_buffer(disk.get_length())
+		disk.close()
+		check("файл данных на диске зашифрован", Crypt.looks_sealed(disk_blob))
+		check("переписки открытым текстом в файле нет",
+			not disk_blob.get_string_from_utf8().contains("привет, мир"))
+
+	# Старый файл без шифрования читается и сразу пересохраняется зашифрованным
+	var legacy := FileAccess.open(Store.save_path, FileAccess.WRITE)
+	legacy.store_string(JSON.stringify({
+		"accounts": [{ "nick": "старый", "pass_hash": "", "created": 1 }],
+		"chats": {}, "groups": {}, "settings": {}, "unread": {}
+	}))
+	legacy.close()
+	Store.accounts = []
+	Store.load_data()
+	check("старый файл без шифрования читается", Store.accounts.size() == 1
+		and String((Store.accounts[0] as Dictionary).get("nick", "")) == "старый",
+		str(Store.accounts))
+	var after := FileAccess.open(Store.save_path, FileAccess.READ)
+	var after_blob := after.get_buffer(after.get_length())
+	after.close()
+	check("после чтения файл пересохранён зашифрованным", Crypt.looks_sealed(after_blob))
 
 	print("---")
 	print("проверок пройдено: ", passes, ", ошибок: ", failures)
