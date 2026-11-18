@@ -50,6 +50,20 @@ func accent_label(text: String, size: int = 13, wrap: bool = false) -> Label:
 	node.add_theme_constant_override("outline_size", 0)
 	return node
 
+## Маленькая «таблетка» с подписью, как бейджи на сайте: скруглённая плашка,
+## тонкая рамка и приглушённый текст. Внутри — Label, его и обновляют.
+func badge(text: String, size: int = 11) -> PanelContainer:
+	var p := pal()
+	var panel := PanelContainer.new()
+	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	panel.add_theme_stylebox_override("panel", UiStyle.box(p["panel"], 999, p["line"], 1, 8))
+	var node := label(text, size, p["muted"])
+	node.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	node.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	panel.add_child(node)
+	return panel
+
 ## ---------------------------------------------------------------- контейнеры
 
 func vbox(separation: int = 12) -> VBoxContainer:

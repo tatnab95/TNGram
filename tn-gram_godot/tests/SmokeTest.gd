@@ -201,7 +201,8 @@ func _ready() -> void:
 	await get_tree().process_frame
 	check("экран входа открывается", main.current_id == "login")
 	check("на экране входа есть кнопки", count_nodes(main.screen, "Button") >= 3, str(count_nodes(main.screen, "Button")))
-	check("на экране входа видно имя приложения", find_label(main.screen, "Тнграм") != null)
+	check("на экране входа виден заголовок входа", find_label(main.screen, "Вход в Тнграм") != null)
+	check("на экране входа есть быстрый вход без пароля", find_label(main.screen, "Быстрый вход") != null)
 
 	main.show_screen("new", null)
 	await get_tree().process_frame

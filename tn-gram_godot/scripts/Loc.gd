@@ -16,6 +16,9 @@ const STRINGS := {
 		"delete": "Удалить",
 
 		# --- вход ---
+		"login_title_web": "Вход в Тнграм",
+		"login_subtitle_web": "Тот же ник и пароль, что и в приложении.",
+		"login_quick": "Быстрый вход",
 		"login_title": "Кто ты?",
 		"login_subtitle": "Выбери аккаунт или создай новый ник. Номер телефона не нужен.",
 		"login_pick": "Аккаунты на этом устройстве",
@@ -230,6 +233,9 @@ const STRINGS := {
 		"delete": "Delete",
 
 		# --- вход ---
+		"login_title_web": "Sign in to Tngram",
+		"login_subtitle_web": "Same nickname and password as in the app.",
+		"login_quick": "Quick sign-in",
 		"login_title": "Who are you?",
 		"login_subtitle": "Pick an account or create a new nickname. No phone number needed.",
 		"login_pick": "Accounts on this device",

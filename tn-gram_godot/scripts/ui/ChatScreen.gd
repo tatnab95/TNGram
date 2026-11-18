@@ -153,14 +153,12 @@ func build() -> void:
 	names.add_child(status_label)
 	top.add_child(names)
 	if not is_ai:
-		ping_label = hint(_ping_text(), 11)
-		ping_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		ping_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		# Как на сайте: подпись в скруглённой плашке, а не просто текст.
+		var ping_badge := badge(_ping_text(), 11)
+		ping_label = ping_badge.get_child(0) as Label
 		ping_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 		ping_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		ping_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		ping_label.custom_minimum_size.x = 0
-		top.add_child(ping_label)
+		top.add_child(ping_badge)
 	top.add_child(ghost_button("⋮", func() -> void:
 		_confirm_delete()))
 	var head := PanelContainer.new()
