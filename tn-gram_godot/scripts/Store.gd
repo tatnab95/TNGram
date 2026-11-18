@@ -4,6 +4,7 @@ extends Node
 ## Подключается как автозагрузка (Autoload) с именем Store — см. project.godot.
 
 const P := preload("res://scripts/net/Protocol.gd")
+const Crypt := preload("res://scripts/Crypt.gd")
 
 const DEFAULT_SAVE_PATH := "user://tngram_data.json"
 ## Аккаунты, которые создаются при первом запуске (без пароля)
@@ -1029,18 +1030,33 @@ func set_relay(host: String, port: int, auto: bool, key: String = "") -> void:
 ## ------------------------------------------------------------------ файл данных
 
 func save_data() -> void:
-	var file := FileAccess.open(save_path, FileAccess.WRITE)
-	if file == null:
-		push_warning("Не удалось сохранить данные: " + save_path)
-		return
-	file.store_string(JSON.stringify({
+	var text := JSON.stringify({
 		"accounts": accounts,
 		"chats": chats,
 		"groups": groups,
 		"settings": settings,
 		"unread": unread
-	}, "\t"))
+	}, "\t")
+	# Файл на устройстве шифруется: переписка и настройки не лежат открытым текстом.
+	var blob := Crypt.seal(_data_key(), text.to_utf8_buffer())
+	if blob.is_empty():
+		push_warning("Не удалось зашифровать данные: " + save_path)
+		return
+	var file := FileAccess.open(save_path, FileAccess.WRITE)
+	if file == null:
+		push_warning("Не удалось сохранить данные: " + save_path)
+		return
+	file.store_buffer(blob)
 	file.close()
+
+## Ключ шифрования этого файла — 32 случайных байта в отдельном файле рядом.
+## Без него файл данных не читается; сам ключ в переписку не попадает.
+var _data_key_cache := PackedByteArray()
+
+func _data_key() -> PackedByteArray:
+	if _data_key_cache.size() != Crypt.KEY_BYTES:
+		_data_key_cache = Crypt.load_or_create_key(save_path.get_basename() + ".key")
+	return _data_key_cache
 
 func load_data() -> void:
 	if not FileAccess.file_exists(save_path):
@@ -1048,8 +1064,24 @@ func load_data() -> void:
 	var file := FileAccess.open(save_path, FileAccess.READ)
 	if file == null:
 		return
-	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	var raw := file.get_buffer(file.get_length())
 	file.close()
+	var text := ""
+	if Crypt.looks_sealed(raw):
+		var plain := Crypt.open(_data_key(), raw)
+		if plain.is_empty():
+			# Ключ потерян или файл подменён. Ничего не затираем: откладываем
+			# файл в сторону, чтобы его можно было восстановить.
+			var broken := save_path + ".broken-" + str(int(Time.get_unix_time_from_system()))
+			DirAccess.rename_absolute(ProjectSettings.globalize_path(save_path),
+				ProjectSettings.globalize_path(broken))
+			push_warning("Файл данных не расшифровался, отложен в " + broken)
+			return
+		text = plain.get_string_from_utf8()
+	else:
+		# Старый файл без шифрования: прочитаем и сразу пересохраним зашифрованным.
+		text = raw.get_string_from_utf8()
+	var parsed: Variant = JSON.parse_string(text)
 	if typeof(parsed) != TYPE_DICTIONARY:
 		push_warning("Файл данных повреждён, начинаем с чистого листа")
 		return

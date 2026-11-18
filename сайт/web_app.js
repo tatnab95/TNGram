@@ -221,10 +221,59 @@
 
   /* ------------------------------------------------------------ хранилище */
 
-  function loadData(nick) {
+  /* Переписка в браузере шифруется AES-GCM. Ключ случайный (32 байта) и лежит
+     в localStorage рядом с данными: это защищает от чтения значения «глазами»
+     и от копии одного ключа данных, но не от того, у кого есть доступ ко всему
+     origin целиком. */
+  var KEY_STORAGE = 'tngram-web-key';
+  var dataKeyCache = null;
+
+  function b64(buf) {
+    var bytes = new Uint8Array(buf), out = '';
+    for (var i = 0; i < bytes.length; i++) out += String.fromCharCode(bytes[i]);
+    return btoa(out);
+  }
+  function unb64(text) {
+    var bin = atob(String(text || ''));
+    var out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function dataKey() {
+    if (dataKeyCache) return Promise.resolve(dataKeyCache);
+    var raw = null;
+    try { raw = localStorage.getItem(KEY_STORAGE); } catch (e) {}
+    var bytes = null;
+    if (raw) {
+      try { bytes = unb64(raw); } catch (e) { bytes = null; }
+    }
+    if (!bytes || bytes.length !== 32) {
+      bytes = crypto.getRandomValues(new Uint8Array(32));
+      try { localStorage.setItem(KEY_STORAGE, b64(bytes)); } catch (e) {}
+    }
+    return crypto.subtle.importKey('raw', bytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt'])
+      .then(function (key) { dataKeyCache = key; return key; });
+  }
+
+  async function loadData(nick) {
     var raw = null, d = null;
     try { raw = localStorage.getItem(DATA_PREFIX + nk(nick)); } catch (e) {}
-    try { d = raw ? JSON.parse(raw) : null; } catch (e) { d = null; }
+    if (raw) {
+      var parsed = null;
+      try { parsed = JSON.parse(raw); } catch (e) {}
+      if (parsed && parsed.v === 1 && parsed.iv && parsed.data) {
+        try {
+          var key = await dataKey();
+          var plain = await crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv: unb64(parsed.iv) }, key, unb64(parsed.data));
+          d = JSON.parse(new TextDecoder().decode(plain));
+        } catch (e) { d = null; }
+      } else if (parsed && typeof parsed === 'object') {
+        /* Старый открытый формат: читаем и при следующем сохранении
+           запись уйдёт уже зашифрованной. */
+        d = parsed;
+      }
+    }
     if (!d || typeof d !== 'object') d = {};
     d.nick = d.nick || nick;
     d.chats = d.chats || {};
@@ -233,9 +282,32 @@
     d.seen = d.seen || [];
     return d;
   }
+
+  /* Запись асинхронная: шифрование в WebCrypto не умеет синхронно. Последняя
+     версия данных всегда побеждает, а сохранения идут по очереди. */
+  var saveBusy = false, savePending = null;
+
   function saveData() {
-    if (!st.data) return;
-    try { localStorage.setItem(DATA_PREFIX + nk(st.nick), JSON.stringify(st.data)); } catch (e) {}
+    if (!st.data || !st.nick) return;
+    savePending = { nick: st.nick, text: JSON.stringify(st.data) };
+    if (!saveBusy) runSave();
+  }
+
+  async function runSave() {
+    saveBusy = true;
+    while (savePending) {
+      var job = savePending;
+      savePending = null;
+      try {
+        var key = await dataKey();
+        var iv = crypto.getRandomValues(new Uint8Array(12));
+        var cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key,
+          new TextEncoder().encode(job.text));
+        localStorage.setItem(DATA_PREFIX + nk(job.nick),
+          JSON.stringify({ v: 1, iv: b64(iv), data: b64(cipher) }));
+      } catch (e) { /* без crypto данные останутся только в памяти */ }
+    }
+    saveBusy = false;
   }
 
   /* ------------------------------------------------------------ группы (как в приложении) */
@@ -639,11 +711,11 @@
     st.err = text;
     render();
   }
-  function enterAs(nick) {
+  async function enterAs(nick) {
     st.nick = nick;
     st.busy = false;
     st.err = '';
-    st.data = loadData(nick);
+    st.data = await loadData(nick);
     st.data.nick = nick;
     delete st.data.pass_hash;
     saveData();
@@ -671,7 +743,7 @@
            чтобы дальше он входил уже по пропуску, а не по хешу из таблицы. */
         try { session = await authSignup(real, pass); } catch (e) { session = null; }
       }
-      enterAs(real);
+      await enterAs(real);
       if (session) {
         setSession(st.nick, session);
         try { await claimNick(st.nick); } catch (e) {}
@@ -700,7 +772,7 @@
       if (pass) {
         try { session = await authSignup(nick, pass); } catch (e) { session = null; }
       }
-      enterAs(nick);
+      await enterAs(nick);
       if (session) {
         setSession(st.nick, session);
         try { await claimNick(st.nick); } catch (e) {}
@@ -1233,7 +1305,7 @@
     if (mode === 'chat') render();
   }
 
-  function init() {
+  async function init() {
     shell = $('webapp-shell');
     if (!shell) return;
     shell.addEventListener('click', onClick);
@@ -1246,7 +1318,7 @@
     try { saved = localStorage.getItem(SESSION_KEY); } catch (e) {}
     if (saved) {
       st.nick = saved;
-      st.data = loadData(saved);
+      st.data = await loadData(saved);
       startApp();
     } else {
       render();
