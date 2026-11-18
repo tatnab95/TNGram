@@ -182,12 +182,13 @@
       .then(function (r) { return String(r || ''); });
   }
 
-  function apiFindProfile(nick) {
-    return rest('GET', 'profiles?select=pass_hash,nick&nick_key=eq.' + encodeURIComponent(nk(nick)))
-      .then(function (rows) { return (rows && rows[0]) || null; });
+  /* Таблица профилей закрыта: наружу торчат только эти две функции. */
+  function apiNickExists(nick) {
+    return rest('POST', 'rpc/tn_nick_exists', { p_nick: nick });
   }
-  function apiClaimProfile(nick, hash) {
-    return rest('POST', 'profiles', { nick_key: nk(nick), nick: nick.trim(), pass_hash: hash }, 'return=minimal');
+  function apiClaimProfile(nick) {
+    /* Заводит ник и закрепляет его за учётной записью. Нужен пропуск. */
+    return rest('POST', 'rpc/tn_claim', { p_nick: nick });
   }
   function apiPresenceUpsert() {
     return rest('POST', 'presence?on_conflict=nick_key',
@@ -725,29 +726,21 @@
     var nick = fv(form, 'nick').trim();
     var pass = fv(form, 'password');
     if (nick.length < 2) return failAuth('Ник слишком короткий: нужно хотя бы 2 символа.');
+    if (!pass) return failAuth('Введи пароль.');
     st.busy = true;
     st.err = '';
     render();
     try {
-      var p = await apiFindProfile(nick);
-      if (!p) return failAuth('Аккаунт не найден. Создай ник.');
-      var real = p.nick || nick;
+      if (!(await apiNickExists(nick))) return failAuth('Аккаунт не найден. Создай ник.');
       var session = null;
-      if (pass) {
-        try { session = await authLogin(real, pass); } catch (e) { session = null; }
-      }
-      if (!session && p.pass_hash) {
-        var hash = await sha256(pass);
-        if (p.pass_hash !== hash) return failAuth('Неверный пароль.');
-        /* Аккаунт заведён до перехода на вход облака: заводим ему учётную запись,
-           чтобы дальше он входил уже по пропуску, а не по хешу из таблицы. */
-        try { session = await authSignup(real, pass); } catch (e) { session = null; }
-      }
-      await enterAs(real);
-      if (session) {
-        setSession(st.nick, session);
-        try { await claimNick(st.nick); } catch (e) {}
-      }
+      try { session = await authLogin(nick, pass); } catch (e) { session = null; }
+      if (!session) return failAuth('Неверный пароль.');
+      await enterAs(nick);
+      setSession(st.nick, session);
+      try {
+        var claimed = await claimNick(st.nick);
+        if (claimed) { st.nick = claimed; st.data.nick = claimed; saveData(); }
+      } catch (e) {}
       startApp();
     } catch (e) {
       failAuth('Нет связи с облаком. Проверь интернет и попробуй ещё раз.');
@@ -760,23 +753,22 @@
     if (nick.length < 2) return failAuth('Ник слишком короткий: нужно хотя бы 2 символа.');
     if (nick.length > 24) return failAuth('Ник слишком длинный: максимум 24 символа.');
     if (pass !== repeat) return failAuth('Пароли не совпадают.');
-    if (pass && pass.length < 6) return failAuth('Пароль слишком короткий: нужно хотя бы 6 знаков.');
+    if (pass.length < 6) return failAuth('Пароль слишком короткий: нужно хотя бы 6 знаков.');
     st.busy = true;
     st.err = '';
     render();
     try {
-      if (await apiFindProfile(nick)) return failAuth('Такой ник уже занят. Войди под ним.');
-      var hash = await sha256(pass);
-      await apiClaimProfile(nick, hash);
+      if (await apiNickExists(nick)) return failAuth('Такой ник уже занят. Войди под ним.');
       var session = null;
-      if (pass) {
-        try { session = await authSignup(nick, pass); } catch (e) { session = null; }
-      }
+      try { session = await authSignup(nick, pass); } catch (e) { session = null; }
+      if (!session) return failAuth('Не удалось создать учётную запись. Попробуй другой пароль.');
       await enterAs(nick);
-      if (session) {
-        setSession(st.nick, session);
-        try { await claimNick(st.nick); } catch (e) {}
-      }
+      setSession(st.nick, session);
+      var claimed = await claimNick(nick);
+      if (!claimed) { failAuth('Ник занят. Войди под ним.'); return; }
+      st.nick = claimed;
+      st.data.nick = claimed;
+      saveData();
       startApp();
     } catch (e) {
       failAuth(e.status === 409 ? 'Такой ник уже занят. Войди под ним.'
@@ -854,21 +846,20 @@
     if (!force) {
       st.busy = true;
       render();
-      var p = null;
+      var exists = false;
       try {
-        p = await apiFindProfile(nick);
+        exists = !!(await apiNickExists(nick));
       } catch (e) {
         st.busy = false;
         st.err = 'Нет связи с облаком. Попробуй ещё раз.';
         return render();
       }
       st.busy = false;
-      if (!p) {
+      if (!exists) {
         st.pending = nick;
         st.err = 'Такого ника в Тнграме нет. Проверь написание или открой всё равно.';
         return render();
       }
-      nick = p.nick || nick;
     }
     ensureChat(nk(nick), nick);
     saveData();
@@ -971,7 +962,7 @@
         : 'Тот же ник и пароль, что и в приложении.') + '</p>' +
       '<div><span class="tg-label">Ник</span>' +
       '<input class="tg-input pill" name="nick" placeholder="например, твой_ник" autocomplete="username"></div>' +
-      '<div><span class="tg-label">Пароль' + (reg ? ' (необязательно)' : '') + '</span>' +
+      '<div><span class="tg-label">Пароль</span>' +
       '<input class="tg-input pill" type="password" name="password" autocomplete="' +
       (reg ? 'new-password' : 'current-password') + '"></div>' +
       (reg ? '<div><span class="tg-label">Повтори пароль</span>' +
