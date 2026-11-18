@@ -182,6 +182,15 @@ func session_expired(nick: String = "") -> bool:
 func has_session(nick: String = "") -> bool:
 	return not _session_of(nick if nick != "" else current_nick).is_empty()
 
+## Облако отказало (401): считаем пропуск просроченным, чтобы его обновили.
+func expire_session(nick: String = "") -> void:
+	var sess := _session_of(nick if nick != "" else current_nick)
+	if sess.is_empty():
+		return
+	sess["expires_at"] = 0
+	save_data()
+	emit_signal("data_changed")
+
 ## Ключ обновления: по нему получают новый пропуск, не спрашивая пароль снова
 func refresh_value(nick: String = "") -> String:
 	return String(_session_of(nick if nick != "" else current_nick).get("refresh_token", ""))

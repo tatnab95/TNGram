@@ -879,6 +879,13 @@ func _ready() -> void:
 	Store.accounts = []
 	Store.load_data()
 	check("пропуск переживает перезапуск", Store.auth_token("админ") == "tok1", Store.auth_token("админ"))
+	# Облако ответило 401 — пропуск больше не годится, но ключ обновления остаётся
+	Store.expire_session("админ")
+	check("просроченный пропуск не отдаётся", Store.auth_token("админ") == "", Store.auth_token("админ"))
+	check("ключ обновления после отказа на месте", Store.refresh_value("админ") == "ref1", Store.refresh_value("админ"))
+	check("после отказа пропуск считается просроченным", Store.session_expired("админ"))
+	Store.set_session("админ", { "access_token": "tok2", "refresh_token": "ref2", "expires_in": 3600, "user_id": "u1" })
+	check("новый пропуск снова годен", Store.auth_token("админ") == "tok2", Store.auth_token("админ"))
 	Store.clear_session("админ")
 	check("пропуск убирается", Store.auth_token("админ") == "", Store.auth_token("админ"))
 

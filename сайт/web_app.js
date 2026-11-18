@@ -15,6 +15,7 @@
   var SESSION_KEY = 'tngram-web-session';
   var DATA_PREFIX = 'tngram-web-data:';
   var SEEN_MAX = 400;
+  var AUTH_DOMAIN = '@tngram.local';
 
   var shell = null;
   var st = {
@@ -76,8 +77,16 @@
 
   /* ------------------------------------------------------------ облако (REST) */
 
-  function rest(method, path, body, prefer) {
-    var headers = { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, Accept: 'application/json' };
+  /* Пропуск облака живёт час: пока он свежий, запросы идут от имени человека. */
+  function tokenNow() {
+    var a = st.data && st.data.auth;
+    if (!a || !a.access_token) return '';
+    if (Number(a.expires_at || 0) <= nowSec() + 30) return '';
+    return String(a.access_token);
+  }
+
+  function restRaw(method, path, body, prefer, tok) {
+    var headers = { apikey: SB_KEY, Authorization: 'Bearer ' + (tok || SB_KEY), Accept: 'application/json' };
     if (body !== undefined) headers['Content-Type'] = 'application/json; charset=utf-8';
     if (prefer) headers.Prefer = prefer;
     return fetch(SB_URL + '/rest/v1/' + path, {
@@ -94,6 +103,83 @@
         return text ? JSON.parse(text) : null;
       });
     });
+  }
+
+  /* Пропуск живёт час. Если облако ответило 401 — обновляем его и повторяем
+     запрос один раз; без ключа обновления работаем по публичному ключу. */
+  function rest(method, path, body, prefer) {
+    return restRaw(method, path, body, prefer, tokenNow()).catch(function (err) {
+      var a = st.data && st.data.auth;
+      if (err.status !== 401 || !a || !a.refresh_token) throw err;
+      return ensureSession().then(function () {
+        if (!tokenNow()) throw err;
+        return restRaw(method, path, body, prefer, tokenNow());
+      });
+    });
+  }
+
+  /* ------------------------------------------------------------ вход в облако */
+
+  function authEmail(nick) {
+    var bytes = new TextEncoder().encode(nk(nick));
+    var hex = '';
+    for (var i = 0; i < bytes.length; i++) hex += two(bytes[i].toString(16));
+    return 'n' + hex + AUTH_DOMAIN;
+  }
+
+  function authPost(path, payload) {
+    return fetch(SB_URL + '/auth/v1/' + path, {
+      method: 'POST',
+      headers: { apikey: SB_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (res) {
+      return res.text().then(function (text) {
+        var data = null;
+        try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+        if (!res.ok) {
+          var err = new Error((data && (data.error_code || data.msg)) || ('http ' + res.status));
+          err.status = res.status;
+          throw err;
+        }
+        return data;
+      });
+    });
+  }
+
+  function authLogin(nick, pass) {
+    return authPost('token?grant_type=password', { email: authEmail(nick), password: pass })
+      .then(function (s) { return s && s.access_token ? s : null; });
+  }
+
+  function authSignup(nick, pass) {
+    return authPost('signup', { email: authEmail(nick), password: pass })
+      .then(function (s) { return s && s.access_token ? s : null; });
+  }
+
+  function setSession(nick, s) {
+    if (!s || !s.access_token) return;
+    st.data.auth = {
+      access_token: String(s.access_token),
+      refresh_token: String(s.refresh_token || ''),
+      expires_at: nowSec() + (Number(s.expires_in) || 3600)
+    };
+    saveData();
+  }
+
+  /* Обновить пропуск, если срок вышел. Нет ключа обновления — работаем как раньше. */
+  function ensureSession() {
+    var a = st.data && st.data.auth;
+    if (!a || !a.refresh_token) return Promise.resolve('');
+    if (Number(a.expires_at || 0) > nowSec() + 30) return Promise.resolve(String(a.access_token));
+    return authPost('token?grant_type=refresh_token', { refresh_token: a.refresh_token })
+      .then(function (s) { setSession(st.nick, s); return tokenNow(); })
+      .catch(function () { return ''; });
+  }
+
+  /* Закрепить ник за учётной записью: облако само не отдаст чужой. */
+  function claimNick(nick) {
+    return rest('POST', 'rpc/tn_claim', { p_nick: nick })
+      .then(function (r) { return String(r || ''); });
   }
 
   function apiFindProfile(nick) {
@@ -113,6 +199,9 @@
     return rest('GET', 'presence?select=nick_key,nick,last_seen&nick_key=in.(' + list + ')');
   }
   function apiSend(to, body, ts) {
+    if (tokenNow()) {
+      return rest('POST', 'rpc/tn_send', { p_to: to, p_body: body, p_ts: ts });
+    }
     return rest('POST', 'messages',
       { from_nick: st.nick, to_nick: to, body: body, client_ts: ts }, 'return=minimal');
   }
@@ -126,7 +215,8 @@
     return rest('GET', 'news?select=*&published=eq.true&order=created_at.desc&limit=20');
   }
   function apiPing() {
-    return rest('GET', 'profiles?select=nick_key&limit=1');
+    /* Спрашиваем таблицу версии: она открыта на чтение всегда, в отличие от профилей. */
+    return rest('GET', 'version?select=id&limit=1');
   }
 
   /* ------------------------------------------------------------ хранилище */
@@ -453,7 +543,7 @@
               event: 'INSERT', schema: 'public', table: 'messages', filter: 'to_nick=eq.' + st.nick
             }]
           },
-          access_token: SB_KEY
+          access_token: tokenNow() || SB_KEY
         },
         ref: nextRef()
       });
@@ -549,16 +639,15 @@
     st.err = text;
     render();
   }
-  function enterAs(nick, hash) {
+  function enterAs(nick) {
     st.nick = nick;
     st.busy = false;
     st.err = '';
     st.data = loadData(nick);
     st.data.nick = nick;
-    st.data.pass_hash = hash;
+    delete st.data.pass_hash;
     saveData();
     try { localStorage.setItem(SESSION_KEY, nick); } catch (e) {}
-    startApp();
   }
   async function doLogin(form) {
     var nick = fv(form, 'nick').trim();
@@ -570,9 +659,24 @@
     try {
       var p = await apiFindProfile(nick);
       if (!p) return failAuth('Аккаунт не найден. Создай ник.');
-      var hash = await sha256(pass);
-      if (p.pass_hash && p.pass_hash !== hash) return failAuth('Неверный пароль.');
-      enterAs(p.nick || nick, p.pass_hash || '');
+      var real = p.nick || nick;
+      var session = null;
+      if (pass) {
+        try { session = await authLogin(real, pass); } catch (e) { session = null; }
+      }
+      if (!session && p.pass_hash) {
+        var hash = await sha256(pass);
+        if (p.pass_hash !== hash) return failAuth('Неверный пароль.');
+        /* Аккаунт заведён до перехода на вход облака: заводим ему учётную запись,
+           чтобы дальше он входил уже по пропуску, а не по хешу из таблицы. */
+        try { session = await authSignup(real, pass); } catch (e) { session = null; }
+      }
+      enterAs(real);
+      if (session) {
+        setSession(st.nick, session);
+        try { await claimNick(st.nick); } catch (e) {}
+      }
+      startApp();
     } catch (e) {
       failAuth('Нет связи с облаком. Проверь интернет и попробуй ещё раз.');
     }
@@ -592,7 +696,16 @@
       if (await apiFindProfile(nick)) return failAuth('Такой ник уже занят. Войди под ним.');
       var hash = await sha256(pass);
       await apiClaimProfile(nick, hash);
-      enterAs(nick, hash);
+      var session = null;
+      if (pass) {
+        try { session = await authSignup(nick, pass); } catch (e) { session = null; }
+      }
+      enterAs(nick);
+      if (session) {
+        setSession(st.nick, session);
+        try { await claimNick(st.nick); } catch (e) {}
+      }
+      startApp();
     } catch (e) {
       failAuth(e.status === 409 ? 'Такой ник уже занят. Войди под ним.'
         : 'Нет связи с облаком. Попробуй ещё раз.');
@@ -601,6 +714,10 @@
   function logout() {
     disconnect();
     stopTimers();
+    if (st.data) {
+      delete st.data.auth;
+      saveData();
+    }
     try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
     st.nick = '';
     st.data = null;
@@ -618,14 +735,16 @@
     st.online = false;
     render();
     stopTimers();
-    connect();
-    beat();
-    look();
-    measurePing();
-    timers.push(setInterval(beat, 25000));
-    timers.push(setInterval(look, 12000));
-    timers.push(setInterval(measurePing, 8000));
-    timers.push(setInterval(pullPending, 12000));
+    ensureSession().then(function () {
+      connect();
+      beat();
+      look();
+      measurePing();
+      timers.push(setInterval(beat, 25000));
+      timers.push(setInterval(look, 12000));
+      timers.push(setInterval(measurePing, 8000));
+      timers.push(setInterval(pullPending, 12000));
+    });
   }
   function stopTimers() {
     timers.forEach(clearInterval);

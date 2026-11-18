@@ -17,6 +17,12 @@ const P := preload("res://scripts/net/Protocol.gd")
 ## не пришло. Повторять безопасно: приложение узнаёт сообщение по метке id и
 ## повторно записывать его не станет.
 const RESEND_EVERY := 10.0
+## Больше этого в строке быть не может: строка — один JSON, а не файл.
+const MAX_LINE := 65536
+## Предел длины сообщения. Такой же, как в облаке.
+const MAX_TEXT := 4000
+## Сколько сообщений держим для одного получателя, пока он не заглянул.
+const MAX_QUEUE := 500
 
 var port := P.DEFAULT_PORT
 var server := TCPServer.new()
@@ -61,6 +67,12 @@ func _process(_delta: float) -> void:
 			var result: Array = peer.get_data(count)
 			if int(result[0]) == OK:
 				client["buf"] = String(client["buf"]) + (result[1] as PackedByteArray).get_string_from_utf8()
+				# Клиент, который шлёт бесконечную строку без перевода, не должен
+				# съесть память сервера.
+				if String(client["buf"]).length() > MAX_LINE:
+					print("[сервер] строка больше предела — отключаю клиента")
+					_close(client)
+					continue
 				_drain(client)
 		if not bool(client.get("dead", false)):
 			alive.append(client)
@@ -134,6 +146,13 @@ func _send(client: Dictionary, to_nick: String, text: String) -> void:
 		return
 	if to_nick == "" or text.strip_edges() == "":
 		_reply(client, { "t": P.S_ERROR, "text": "пустое сообщение" })
+		return
+	if text.length() > MAX_TEXT:
+		_reply(client, { "t": P.S_ERROR, "text": "слишком длинное сообщение" })
+		return
+	if _queue_for(to_nick).size() >= MAX_QUEUE:
+		# Получатель давно не заходил: не копим без предела.
+		_reply(client, { "t": P.S_ERROR, "text": "у получателя слишком много непрочитанных" })
 		return
 	_next_id += 1
 	var item := {

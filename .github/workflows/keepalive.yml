@@ -1,6 +1,9 @@
 # Держим бесплатный проект Supabase «живым».
 # Бесплатный проект засыпает после 7 дней без запросов. Этот файл раз в сутки
-# делает один безобидный запрос к таблице сообщений — и проект не засыпает.
+# делает один безобидный запрос — и проект не засыпает.
+#
+# Спрашиваем таблицу version: она открыта на чтение для всех и остаётся такой
+# даже после того, как переписка закроется от публичного ключа.
 #
 # Ключ здесь публичный (publishable) — такой же лежит в самом приложении.
 
@@ -21,7 +24,6 @@ jobs:
         run: |
           code=$(curl -sS -o /dev/null -w "%{http_code}" \
             -H "apikey: $SUPABASE_KEY" \
-            -H "Authorization: Bearer $SUPABASE_KEY" \
-            "https://hqmgjnloilemdwejzoyy.supabase.co/rest/v1/messages?select=id&limit=1")
+            "https://hqmgjnloilemdwejzoyy.supabase.co/rest/v1/version?select=id&limit=1")
           echo "HTTP $code"
           test "$code" = "200"
